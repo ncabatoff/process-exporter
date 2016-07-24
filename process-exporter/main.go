@@ -68,6 +68,8 @@ func main() {
 			"comma-seperated list of process names to monitor")
 		minIoPercent = flag.Float64("min-io-pct", 10.0,
 			"percent of total I/O seen needed to promote out of 'other'")
+		minCpuPercent = flag.Float64("min-cpu-pct", 10.0,
+			"percent of total CPU seen needed to promote out of 'other'")
 	)
 	flag.Parse()
 
@@ -78,7 +80,7 @@ func main() {
 		}
 	}
 
-	pc := NewProcessCollector(*minIoPercent, names)
+	pc := NewProcessCollector(*minIoPercent, *minCpuPercent, names)
 
 	if err := pc.Init(); err != nil {
 		log.Fatalf("Error initializing: %v", err)
@@ -123,6 +125,7 @@ func main() {
 type (
 	NamedProcessCollector struct {
 		minIoPercent  float64
+		minCpuPercent float64
 		wantProcNames map[string]struct{}
 		// track how much was seen last time so we can report the delta
 		groupStats map[string]counts
@@ -175,9 +178,10 @@ func (ps procSum) String() string {
 	return fmt.Sprintf("%20s %20s %7.0f %12d %12d", ps.name, cmd, ps.cpu, ps.readbytes, ps.writebytes)
 }
 
-func NewProcessCollector(minIoPercent float64, procnames []string) *NamedProcessCollector {
+func NewProcessCollector(minIoPercent float64, minCpuPercent float64, procnames []string) *NamedProcessCollector {
 	pc := NamedProcessCollector{
 		minIoPercent:  minIoPercent,
+		minCpuPercent: minCpuPercent,
 		wantProcNames: make(map[string]struct{}),
 		groupStats:    make(map[string]counts),
 		tracker:       NewProcTracker(),
@@ -253,18 +257,21 @@ func (p *NamedProcessCollector) getGroups() map[string]groupcounts {
 	}
 
 	totdeltaio := float64(delta.readbytes + delta.writebytes)
+	totdeltacpu := float64(delta.cpu + delta.cpu)
 	gcounts := make(map[string]groupcounts)
 
 	for _, pinfo := range p.tracker.procs {
 		gname := pinfo.lastvals.name
 		if _, ok := p.wantProcNames[gname]; !ok {
 			deltaio := float64(pinfo.accum.readbytes + pinfo.accum.writebytes)
-			pct := 100 * deltaio / totdeltaio
-			if pct >= p.minIoPercent {
+			iopct := 100 * deltaio / totdeltaio
+			deltacpu := float64(pinfo.accum.readbytes + pinfo.accum.writebytes)
+			cpupct := 100 * deltacpu / totdeltacpu
+			if iopct >= p.minIoPercent || cpupct >= p.minCpuPercent/totdeltacpu {
 				p.wantProcNames[gname] = struct{}{}
+			} else {
+				gname = "other"
 			}
-
-			gname = "other"
 		}
 
 		cur := gcounts[gname]

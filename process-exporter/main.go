@@ -69,6 +69,12 @@ var (
 		"number of bytes written by this group",
 		[]string{"groupname"},
 		nil)
+
+	membytesDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_memory_bytes",
+		"number of bytes of memory in use",
+		[]string{"groupname", "memtype"},
+		nil)
 )
 
 type (
@@ -230,17 +236,23 @@ type (
 
 	groupcounts struct {
 		counts
-		procs int
+		procs       int
+		memresident uint64
+		memvirtual  uint64
+		memswap     uint64
 	}
 
 	// procSum contains data read from /proc/pid/*
 	procSum struct {
-		name       string
-		cmdline    string
-		cpu        float64
-		readbytes  uint64
-		writebytes uint64
-		startTime  time.Time
+		name        string
+		cmdline     string
+		cpu         float64
+		readbytes   uint64
+		writebytes  uint64
+		startTime   time.Time
+		memresident uint64
+		memvirtual  uint64
+		memswap     uint64
 	}
 
 	trackedProc struct {
@@ -294,6 +306,7 @@ func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- numprocsDesc
 	ch <- readbytesDesc
 	ch <- writebytesDesc
+	ch <- membytesDesc
 }
 
 // Collect implements prometheus.Collector.
@@ -301,6 +314,12 @@ func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
 	for gname, gcounts := range p.getGroups() {
 		ch <- prometheus.MustNewConstMetric(numprocsDesc,
 			prometheus.GaugeValue, float64(gcounts.procs), gname)
+		ch <- prometheus.MustNewConstMetric(membytesDesc,
+			prometheus.GaugeValue, float64(gcounts.memresident), gname, "resident")
+		ch <- prometheus.MustNewConstMetric(membytesDesc,
+			prometheus.GaugeValue, float64(gcounts.memvirtual), gname, "virtual")
+		ch <- prometheus.MustNewConstMetric(membytesDesc,
+			prometheus.GaugeValue, float64(gcounts.memswap), gname, "swap")
 
 		if grpstat, ok := p.groupStats[gname]; ok {
 			// It's convenient to treat cpu, readbytes, etc as counters so we can use rate().
@@ -367,6 +386,9 @@ func (p *NamedProcessCollector) getGroups() map[string]groupcounts {
 
 		cur := gcounts[gname]
 		cur.procs++
+		cur.memresident += pinfo.lastvals.memresident
+		cur.memvirtual += pinfo.lastvals.memvirtual
+		cur.memswap += pinfo.lastvals.memswap
 		cur.counts.cpu += pinfo.accum.cpu
 		cur.counts.readbytes += pinfo.accum.readbytes
 		cur.counts.writebytes += pinfo.accum.writebytes
@@ -477,12 +499,20 @@ func getProcSummary(pid int32) (procSum, error) {
 		return psum, err
 	}
 
+	meminfo, err := proc.MemoryInfo()
+	if err != nil {
+		return psum, err
+	}
+
 	psum.name = name
 	psum.cmdline = cmdline
 	psum.cpu = times.User + times.System
 	psum.writebytes = ios.WriteBytes
 	psum.readbytes = ios.ReadBytes
 	psum.startTime = time.Unix(ctime, 0)
+	psum.memresident = meminfo.RSS
+	psum.memvirtual = meminfo.VMS
+	psum.memswap = meminfo.Swap
 
 	return psum, nil
 }

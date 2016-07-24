@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"regexp"
 	"strings"
 	"time"
 
@@ -47,13 +48,59 @@ type (
 		bytes.Buffer
 		header http.Header
 	}
+
+	nameMapper struct {
+		mapping map[string]*regexp.Regexp
+	}
 )
+
+func (nm nameMapper) get(name, cmdline string) string {
+	if regex, ok := nm.mapping[name]; ok {
+		matches := regex.FindStringSubmatch(cmdline)
+		if len(matches) > 1 {
+			for _, matchstr := range matches[1:] {
+				if matchstr != "" {
+					return name + ":" + matchstr
+				}
+			}
+		}
+	}
+	return name
+}
 
 func (d *dummyResponseWriter) Header() http.Header {
 	return d.header
 }
 
 func (d *dummyResponseWriter) WriteHeader(code int) {
+}
+
+func parseNameMapper(s string) (*nameMapper, error) {
+	mapper := make(map[string]*regexp.Regexp)
+	if s == "" {
+		return &nameMapper{mapper}, nil
+	}
+
+	toks := strings.Split(s, ",")
+	if len(toks)%2 == 1 {
+		return nil, fmt.Errorf("bad namemapper: odd number of tokens")
+	}
+
+	for i, tok := range toks {
+		if tok == "" {
+			return nil, fmt.Errorf("bad namemapper: token %d is empty", i)
+		}
+		if i%2 == 1 {
+			name, regexstr := toks[i-1], tok
+			if r, err := regexp.Compile(regexstr); err != nil {
+				return nil, fmt.Errorf("error compiling regexp '%s': %v", regexstr, err)
+			} else {
+				mapper[name] = r
+			}
+		}
+	}
+
+	return &nameMapper{mapper}, nil
 }
 
 func main() {
@@ -70,6 +117,8 @@ func main() {
 			"percent of total I/O seen needed to promote out of 'other'")
 		minCpuPercent = flag.Float64("min-cpu-pct", 10.0,
 			"percent of total CPU seen needed to promote out of 'other'")
+		nameMapping = flag.String("namemapping", "",
+			"comma-seperated list, alternating process name and capturing regex to apply to cmdline")
 	)
 	flag.Parse()
 
@@ -80,7 +129,12 @@ func main() {
 		}
 	}
 
-	pc := NewProcessCollector(*minIoPercent, *minCpuPercent, names)
+	namemapper, err := parseNameMapper(*nameMapping)
+	if err != nil {
+		log.Fatalf("Error parsing -namemapping argument '%s': %v", *nameMapping, err)
+	}
+
+	pc := NewProcessCollector(*minIoPercent, *minCpuPercent, names, namemapper)
 
 	if err := pc.Init(); err != nil {
 		log.Fatalf("Error initializing: %v", err)
@@ -127,6 +181,7 @@ type (
 		minIoPercent  float64
 		minCpuPercent float64
 		wantProcNames map[string]struct{}
+		*nameMapper
 		// track how much was seen last time so we can report the delta
 		groupStats map[string]counts
 		tracker    *procTracker
@@ -146,7 +201,7 @@ type (
 	// procSum contains data read from /proc/pid/*
 	procSum struct {
 		name       string
-		cmd        string
+		cmdline    string
 		cpu        float64
 		readbytes  uint64
 		writebytes uint64
@@ -171,18 +226,19 @@ type (
 )
 
 func (ps procSum) String() string {
-	cmd := ps.cmd
+	cmd := ps.cmdline
 	if len(cmd) > 20 {
 		cmd = cmd[:20]
 	}
 	return fmt.Sprintf("%20s %20s %7.0f %12d %12d", ps.name, cmd, ps.cpu, ps.readbytes, ps.writebytes)
 }
 
-func NewProcessCollector(minIoPercent float64, minCpuPercent float64, procnames []string) *NamedProcessCollector {
+func NewProcessCollector(minIoPercent float64, minCpuPercent float64, procnames []string, nameMapper *nameMapper) *NamedProcessCollector {
 	pc := NamedProcessCollector{
 		minIoPercent:  minIoPercent,
 		minCpuPercent: minCpuPercent,
 		wantProcNames: make(map[string]struct{}),
+		nameMapper:    nameMapper,
 		groupStats:    make(map[string]counts),
 		tracker:       NewProcTracker(),
 	}
@@ -261,7 +317,7 @@ func (p *NamedProcessCollector) getGroups() map[string]groupcounts {
 	gcounts := make(map[string]groupcounts)
 
 	for _, pinfo := range p.tracker.procs {
-		gname := pinfo.lastvals.name
+		gname := p.nameMapper.get(pinfo.lastvals.name, pinfo.lastvals.cmdline)
 		if _, ok := p.wantProcNames[gname]; !ok {
 			deltaio := float64(pinfo.accum.readbytes + pinfo.accum.writebytes)
 			iopct := 100 * deltaio / totdeltaio
@@ -387,7 +443,7 @@ func getProcSummary(pid int32) (procSum, error) {
 	}
 
 	psum.name = name
-	psum.cmd = cmdline
+	psum.cmdline = cmdline
 	psum.cpu = times.User + times.System
 	psum.writebytes = ios.WriteBytes
 	psum.readbytes = ios.ReadBytes

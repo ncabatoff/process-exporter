@@ -17,6 +17,34 @@ import (
 	"github.com/shirou/gopsutil/process"
 )
 
+func printManual() {
+	fmt.Print(`process-exporter process selection
+
+By default every process is lumped into the "other" bucket, such that its
+actions are accounted for in metrics with the label groupname="other".
+The following options override that behaviour to allow you to group proceses
+that should be tracked with distinct metrics.
+
+namemapping allows assigning a group name based on a combination of the process
+name and command line.  For example, using 
+
+  -namemapping "python2,([^/]+\.py),java,-jar\s+([^/+]).jar)" 
+
+will make it so that each different python2 and java -jar invocation will be
+tracked with distinct metrics, *IF* they aren't in the "other" bucket.  The
+remaining options below govern what is treated as "other" and what is not.
+
+procnames is a comma-seperated list of process names that should get their own
+metrics.  Even if no such processes are running, metrics will be created with a
+groupname for each of the specific process names.
+
+minIoPercent and minCpuPercent look at the total IO and CPU observed during a
+collection cycle.  If a process that are currently in the "other" bucket 
+has IO or CPU from that cycle which exceeds the threshold, it gets moved out
+of the "other" bucket.
+`)
+}
+
 var (
 	numprocsDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_num_procs",
@@ -119,8 +147,15 @@ func main() {
 			"percent of total CPU seen needed to promote out of 'other'")
 		nameMapping = flag.String("namemapping", "",
 			"comma-seperated list, alternating process name and capturing regex to apply to cmdline")
+		man = flag.Bool("man", false,
+			"print manual")
 	)
 	flag.Parse()
+
+	if *man {
+		printManual()
+		return
+	}
 
 	var names []string
 	for _, s := range strings.Split(*procNames, ",") {

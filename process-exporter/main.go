@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -93,6 +94,12 @@ func main() {
 		}
 
 		prometheus.Handler().ServeHTTP(&drw, httpreq)
+		drw.Buffer.Truncate(0)
+
+		// We throw away the first result because that first collection primes the pump, and
+		// otherwise we won't see our counter metrics.  This is specific to the implementation
+		// of NamedProcessCollector.Collect().
+		prometheus.Handler().ServeHTTP(&drw, httpreq)
 		fmt.Print(drw.String())
 		return
 	}
@@ -114,7 +121,7 @@ func main() {
 }
 
 type (
-	ProcessCollector struct {
+	NamedProcessCollector struct {
 		minIoPercent  float64
 		wantProcNames map[string]struct{}
 		// track how much was seen last time so we can report the delta
@@ -126,6 +133,11 @@ type (
 		cpu        float64
 		readbytes  uint64
 		writebytes uint64
+	}
+
+	groupcounts struct {
+		counts
+		procs int
 	}
 
 	// procSum contains data read from /proc/pid/*
@@ -162,8 +174,8 @@ func (ps procSum) String() string {
 	return fmt.Sprintf("%20s %20s %7.0f %12d %12d", ps.name, cmd, ps.cpu, ps.readbytes, ps.writebytes)
 }
 
-func NewProcessCollector(minIoPercent float64, procnames []string) *ProcessCollector {
-	pc := ProcessCollector{
+func NewProcessCollector(minIoPercent float64, procnames []string) *NamedProcessCollector {
+	pc := NamedProcessCollector{
 		minIoPercent:  minIoPercent,
 		wantProcNames: make(map[string]struct{}),
 		groupStats:    make(map[string]counts),
@@ -175,12 +187,12 @@ func NewProcessCollector(minIoPercent float64, procnames []string) *ProcessColle
 	return &pc
 }
 
-func (p *ProcessCollector) Init() error {
+func (p *NamedProcessCollector) Init() error {
 	return p.tracker.update()
 }
 
 // Describe implements prometheus.Collector.
-func (p *ProcessCollector) Describe(ch chan<- *prometheus.Desc) {
+func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- cpusecsDesc
 	ch <- numprocsDesc
 	ch <- readbytesDesc
@@ -188,84 +200,71 @@ func (p *ProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 // Collect implements prometheus.Collector.
-func (p *ProcessCollector) Collect(ch chan<- prometheus.Metric) {
-	for name, pss := range p.getGroups() {
+func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
+	for gname, gcounts := range p.getGroups() {
 		ch <- prometheus.MustNewConstMetric(numprocsDesc,
-			prometheus.GaugeValue, float64(len(pss)), name)
+			prometheus.GaugeValue, float64(gcounts.procs), gname)
 
-		var cpusecs float64
-		var rbytes, wbytes uint64
-		for _, ps := range pss {
-			cpusecs += ps.cpu
-			rbytes += ps.readbytes
-			wbytes += ps.writebytes
-		}
-
-		if grpstat, ok := p.groupStats[name]; ok {
+		if grpstat, ok := p.groupStats[gname]; ok {
 			// It's convenient to treat cpu, readbytes, etc as counters so we can use rate().
 			// In practice it doesn't quite work because processes can exit while their group
 			// persists, and with that pid's absence our summed value across the group will
 			// become smaller.  We'll cheat by simply pretending there was no change to the
 			// counter when that happens.
 
-			dcpu := cpusecs - grpstat.cpu
+			dcpu := gcounts.cpu - grpstat.cpu
 			if dcpu < 0 {
 				dcpu = 0
 			}
 			ch <- prometheus.MustNewConstMetric(cpusecsDesc,
 				prometheus.CounterValue,
 				dcpu,
-				name)
+				gname)
 
-			drbytes := rbytes - grpstat.readbytes
+			drbytes := gcounts.readbytes - grpstat.readbytes
 			if drbytes < 0 {
 				drbytes = 0
 			}
 			ch <- prometheus.MustNewConstMetric(readbytesDesc,
 				prometheus.CounterValue,
 				float64(drbytes),
-				name)
+				gname)
 
-			dwbytes := wbytes - grpstat.writebytes
+			dwbytes := gcounts.writebytes - grpstat.writebytes
 			if dwbytes < 0 {
 				dwbytes = 0
 			}
 			ch <- prometheus.MustNewConstMetric(writebytesDesc,
 				prometheus.CounterValue,
 				float64(dwbytes),
-				name)
+				gname)
 		}
 
-		p.groupStats[name] = counts{
-			cpu:        cpusecs,
-			readbytes:  rbytes,
-			writebytes: wbytes,
-		}
+		p.groupStats[gname] = gcounts.counts
 	}
 }
 
-func (p *ProcessCollector) getGroups() map[string][]procSum {
-	procsums := make(map[string][]procSum)
-
-	pids, err := process.Pids()
-	if err != nil {
+func (p *NamedProcessCollector) getGroups() map[string]groupcounts {
+	if err := p.tracker.update(); err != nil {
 		log.Fatalf("Error reading procs: %v", err)
 	}
 
-	for _, pid := range pids {
-		if psum, err := getProcSummary(pid); err != nil {
-			// log.Printf("Error reading pid %d: %v", pid, err)
-		} else {
-			pname := psum.name
-			// log.Printf("pname = %s", pname)
-			if _, ok := p.wantProcNames[psum.name]; !ok {
-				pname = "other"
-			}
-			procsums[pname] = append(procsums[pname], psum)
+	gcounts := make(map[string]groupcounts)
+
+	for _, pinfo := range p.tracker.procs {
+		gname := pinfo.lastvals.name
+		if _, ok := p.wantProcNames[gname]; !ok {
+			gname = "other"
 		}
+		cur := gcounts[gname]
+		cur.procs++
+		cur.counts.cpu += pinfo.accum.cpu
+		cur.counts.readbytes += pinfo.accum.readbytes
+		cur.counts.writebytes += pinfo.accum.writebytes
+		gcounts[gname] = cur
 	}
 
-	return procsums
+	return gcounts
 }
 
 func NewProcTracker() *procTracker {
@@ -295,11 +294,24 @@ func (t procTracker) update() error {
 			newaccum.cpu += psum.cpu - cur.lastvals.cpu
 			newaccum.readbytes += psum.readbytes - cur.lastvals.readbytes
 			newaccum.writebytes += psum.writebytes - cur.lastvals.writebytes
+			// log.Printf("%9d %20s %.1f %6d %6d", procid.pid, psum.name, newaccum.cpu, newaccum.readbytes, newaccum.writebytes)
 		}
 		t.procs[procid] = trackedProc{now, psum, newaccum}
 	}
+
+	for procid, pinfo := range t.procs {
+		if pinfo.lastUpdate != now {
+			delete(t.procs, procid)
+		}
+	}
+
 	return nil
 }
+
+var (
+	ErrUnnamed   = errors.New("unnamed proc")
+	ErrNoCommand = errors.New("proc has empty cmdline")
+)
 
 func getProcSummary(pid int32) (procSum, error) {
 	proc, err := process.NewProcess(pid)
@@ -319,6 +331,12 @@ func getProcSummary(pid int32) (procSum, error) {
 		return psum, err
 	}
 
+	if name == "" {
+		// these all appear to be kernel processes, which people generally don't care about
+		// monitoring directly (i.e. the system OS metrics suffice)
+		return psum, ErrUnnamed
+	}
+
 	cmdline, err := proc.Cmdline()
 	if err != nil {
 		return psum, err
@@ -327,7 +345,7 @@ func getProcSummary(pid int32) (procSum, error) {
 	if cmdline == "" {
 		// these all appear to be kernel processes, which people generally don't care about
 		// monitoring directly (i.e. the system OS metrics suffice)
-		return psum, err
+		return psum, ErrNoCommand
 	}
 
 	ios, err := proc.IOCounters()

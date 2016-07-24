@@ -163,6 +163,7 @@ type (
 
 	procTracker struct {
 		procs map[processId]trackedProc
+		accum counts
 	}
 )
 
@@ -188,7 +189,8 @@ func NewProcessCollector(minIoPercent float64, procnames []string) *NamedProcess
 }
 
 func (p *NamedProcessCollector) Init() error {
-	return p.tracker.update()
+	_, err := p.tracker.update()
+	return err
 }
 
 // Describe implements prometheus.Collector.
@@ -245,17 +247,26 @@ func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
 }
 
 func (p *NamedProcessCollector) getGroups() map[string]groupcounts {
-	if err := p.tracker.update(); err != nil {
+	delta, err := p.tracker.update()
+	if err != nil {
 		log.Fatalf("Error reading procs: %v", err)
 	}
 
+	totdeltaio := float64(delta.readbytes + delta.writebytes)
 	gcounts := make(map[string]groupcounts)
 
 	for _, pinfo := range p.tracker.procs {
 		gname := pinfo.lastvals.name
 		if _, ok := p.wantProcNames[gname]; !ok {
+			deltaio := float64(pinfo.accum.readbytes + pinfo.accum.writebytes)
+			pct := 100 * deltaio / totdeltaio
+			if pct >= p.minIoPercent {
+				p.wantProcNames[gname] = struct{}{}
+			}
+
 			gname = "other"
 		}
+
 		cur := gcounts[gname]
 		cur.procs++
 		cur.counts.cpu += pinfo.accum.cpu
@@ -268,17 +279,17 @@ func (p *NamedProcessCollector) getGroups() map[string]groupcounts {
 }
 
 func NewProcTracker() *procTracker {
-	return &procTracker{make(map[processId]trackedProc)}
+	return &procTracker{make(map[processId]trackedProc), counts{}}
 }
 
 // Scan /proc and update oneself.  Rather than allocating a new map each time to detect procs
 // that have disappeared, we bump the last update time on those that are still present.  Then
 // as a second pass we traverse the map looking for stale procs and removing them.
 
-func (t procTracker) update() error {
+func (t procTracker) update() (delta counts, err error) {
 	pids, err := process.Pids()
 	if err != nil {
-		return fmt.Errorf("Error reading procs: %v", err)
+		return delta, fmt.Errorf("Error reading procs: %v", err)
 	}
 
 	now := time.Now()
@@ -288,15 +299,25 @@ func (t procTracker) update() error {
 			continue
 		}
 		procid := processId{pid, psum.startTime}
+
 		var newaccum counts
 		if cur, ok := t.procs[procid]; ok {
 			newaccum = cur.accum
-			newaccum.cpu += psum.cpu - cur.lastvals.cpu
-			newaccum.readbytes += psum.readbytes - cur.lastvals.readbytes
-			newaccum.writebytes += psum.writebytes - cur.lastvals.writebytes
-			// log.Printf("%9d %20s %.1f %6d %6d", procid.pid, psum.name, newaccum.cpu, newaccum.readbytes, newaccum.writebytes)
+
+			dcpu := psum.cpu - cur.lastvals.cpu
+			newaccum.cpu += dcpu
+			delta.cpu += dcpu
+
+			drbytes := psum.readbytes - cur.lastvals.readbytes
+			newaccum.readbytes += drbytes
+			delta.readbytes += drbytes
+
+			dwbytes := psum.writebytes - cur.lastvals.writebytes
+			newaccum.writebytes += dwbytes
+			delta.writebytes += dwbytes
+			// log.Printf("%9d %20s %.1f %6d %6d", procid.pid, psum.name, dcpu, drbytes, dwbytes)
 		}
-		t.procs[procid] = trackedProc{now, psum, newaccum}
+		t.procs[procid] = trackedProc{lastUpdate: now, lastvals: psum, accum: newaccum}
 	}
 
 	for procid, pinfo := range t.procs {
@@ -305,7 +326,7 @@ func (t procTracker) update() error {
 		}
 	}
 
-	return nil
+	return delta, nil
 }
 
 var (

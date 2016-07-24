@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"strings"
+	"time"
 
 	// "github.com/ncabatoff/gopsutil/process" // use my fork until shirou/gopsutil issue#235 fixed, but needs branch fix-internal-pkgref
 	"github.com/prometheus/client_golang/prometheus"
@@ -39,15 +41,61 @@ var (
 		nil)
 )
 
+type (
+	dummyResponseWriter struct {
+		bytes.Buffer
+		header http.Header
+	}
+)
+
+func (d *dummyResponseWriter) Header() http.Header {
+	return d.header
+}
+
+func (d *dummyResponseWriter) WriteHeader(code int) {
+}
+
 func main() {
 	var (
-		listenAddress = flag.String("web.listen-address", ":9256", "Address on which to expose metrics and web interface.")
-		metricsPath   = flag.String("web.telemetry-path", "/metrics", "Path under which to expose metrics.")
-		procNames     = flag.String("procnames", "", "comma-seperated list of process names to monitor")
+		listenAddress = flag.String("web.listen-address", ":9256",
+			"Address on which to expose metrics and web interface.")
+		metricsPath = flag.String("web.telemetry-path", "/metrics",
+			"Path under which to expose metrics.")
+		onceToStdout = flag.Bool("once-to-stdout", false,
+			"Don't bind, instead just print the metrics once to stdout and exit")
+		procNames = flag.String("procnames", "",
+			"comma-seperated list of process names to monitor")
+		minIoPercent = flag.Float64("min-io-pct", 10.0,
+			"percent of total I/O seen needed to promote out of 'other'")
 	)
 	flag.Parse()
 
-	prometheus.MustRegister(NewProcessCollector(strings.Split(*procNames, ",")))
+	var names []string
+	for _, s := range strings.Split(*procNames, ",") {
+		if s != "" {
+			names = append(names, s)
+		}
+	}
+
+	pc := NewProcessCollector(*minIoPercent, names)
+
+	if err := pc.Init(); err != nil {
+		log.Fatalf("Error initializing: %v", err)
+	}
+
+	prometheus.MustRegister(pc)
+
+	if *onceToStdout {
+		drw := dummyResponseWriter{header: make(http.Header)}
+		httpreq, err := http.NewRequest("GET", "/metrics", nil)
+		if err != nil {
+			log.Fatalf("Error building request: %v", err)
+		}
+
+		prometheus.Handler().ServeHTTP(&drw, httpreq)
+		fmt.Print(drw.String())
+		return
+	}
 
 	http.Handle(*metricsPath, prometheus.Handler())
 
@@ -67,24 +115,42 @@ func main() {
 
 type (
 	ProcessCollector struct {
+		minIoPercent  float64
 		wantProcNames map[string]struct{}
 		// track how much was seen last time so we can report the delta
-		groupStats map[string]groupStat
+		groupStats map[string]counts
+		tracker    *procTracker
 	}
 
-	groupStat struct {
+	counts struct {
 		cpu        float64
 		readbytes  uint64
 		writebytes uint64
 	}
 
+	// procSum contains data read from /proc/pid/*
 	procSum struct {
-		pid        int32
 		name       string
 		cmd        string
 		cpu        float64
 		readbytes  uint64
 		writebytes uint64
+		startTime  time.Time
+	}
+
+	trackedProc struct {
+		lastUpdate time.Time
+		lastvals   procSum
+		accum      counts
+	}
+
+	processId struct {
+		pid       int32
+		startTime time.Time
+	}
+
+	procTracker struct {
+		procs map[processId]trackedProc
 	}
 )
 
@@ -96,15 +162,21 @@ func (ps procSum) String() string {
 	return fmt.Sprintf("%20s %20s %7.0f %12d %12d", ps.name, cmd, ps.cpu, ps.readbytes, ps.writebytes)
 }
 
-func NewProcessCollector(procnames []string) *ProcessCollector {
+func NewProcessCollector(minIoPercent float64, procnames []string) *ProcessCollector {
 	pc := ProcessCollector{
+		minIoPercent:  minIoPercent,
 		wantProcNames: make(map[string]struct{}),
-		groupStats:    make(map[string]groupStat),
+		groupStats:    make(map[string]counts),
+		tracker:       NewProcTracker(),
 	}
 	for _, name := range procnames {
 		pc.wantProcNames[name] = struct{}{}
 	}
 	return &pc
+}
+
+func (p *ProcessCollector) Init() error {
+	return p.tracker.update()
 }
 
 // Describe implements prometheus.Collector.
@@ -164,7 +236,7 @@ func (p *ProcessCollector) Collect(ch chan<- prometheus.Metric) {
 				name)
 		}
 
-		p.groupStats[name] = groupStat{
+		p.groupStats[name] = counts{
 			cpu:        cpusecs,
 			readbytes:  rbytes,
 			writebytes: wbytes,
@@ -181,8 +253,11 @@ func (p *ProcessCollector) getGroups() map[string][]procSum {
 	}
 
 	for _, pid := range pids {
-		if psum, interesting := p.isProcInteresting(pid); interesting {
+		if psum, err := getProcSummary(pid); err != nil {
+			// log.Printf("Error reading pid %d: %v", pid, err)
+		} else {
 			pname := psum.name
+			// log.Printf("pname = %s", pname)
 			if _, ok := p.wantProcNames[psum.name]; !ok {
 				pname = "other"
 			}
@@ -193,45 +268,84 @@ func (p *ProcessCollector) getGroups() map[string][]procSum {
 	return procsums
 }
 
-func (p *ProcessCollector) isProcInteresting(pid int32) (psum procSum, interesting bool) {
+func NewProcTracker() *procTracker {
+	return &procTracker{make(map[processId]trackedProc)}
+}
+
+// Scan /proc and update oneself.  Rather than allocating a new map each time to detect procs
+// that have disappeared, we bump the last update time on those that are still present.  Then
+// as a second pass we traverse the map looking for stale procs and removing them.
+
+func (t procTracker) update() error {
+	pids, err := process.Pids()
+	if err != nil {
+		return fmt.Errorf("Error reading procs: %v", err)
+	}
+
+	now := time.Now()
+	for _, pid := range pids {
+		psum, err := getProcSummary(pid)
+		if err != nil {
+			continue
+		}
+		procid := processId{pid, psum.startTime}
+		var newaccum counts
+		if cur, ok := t.procs[procid]; ok {
+			newaccum = cur.accum
+			newaccum.cpu += psum.cpu - cur.lastvals.cpu
+			newaccum.readbytes += psum.readbytes - cur.lastvals.readbytes
+			newaccum.writebytes += psum.writebytes - cur.lastvals.writebytes
+		}
+		t.procs[procid] = trackedProc{now, psum, newaccum}
+	}
+	return nil
+}
+
+func getProcSummary(pid int32) (procSum, error) {
 	proc, err := process.NewProcess(pid)
+	var psum procSum
 	if err != nil {
 		// errors happens so routinely (e.g. when we race) that it's not worth reporting IMO
-		return
+		return psum, err
 	}
 
 	times, err := proc.Times()
-	if times.User+times.System < 0.1 {
-		return
+	if err != nil {
+		return psum, err
 	}
 
 	name, err := proc.Name()
 	if err != nil {
-		return
+		return psum, err
 	}
 
 	cmdline, err := proc.Cmdline()
 	if err != nil {
-		return
+		return psum, err
 	}
 
 	if cmdline == "" {
 		// these all appear to be kernel processes, which people generally don't care about
 		// monitoring directly (i.e. the system OS metrics suffice)
-		return
+		return psum, err
 	}
 
 	ios, err := proc.IOCounters()
 	if err != nil {
-		return
+		return psum, err
 	}
 
-	psum.pid = pid
+	ctime, err := proc.CreateTime()
+	if err != nil {
+		return psum, err
+	}
+
 	psum.name = name
 	psum.cmd = cmdline
 	psum.cpu = times.User + times.System
 	psum.writebytes = ios.WriteBytes
 	psum.readbytes = ios.ReadBytes
+	psum.startTime = time.Unix(ctime, 0)
 
-	return psum, true
+	return psum, nil
 }

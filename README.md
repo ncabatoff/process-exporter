@@ -24,3 +24,5 @@ the polling interval.
 Bytes read and written come from /proc/[pid]/io in recent enough kernels.
 These correspond to the fields read_bytes and write_bytes respectively.
 
+An example Grafana dashboard to view the metrics is available at https://grafana.net/dashboards/249
+

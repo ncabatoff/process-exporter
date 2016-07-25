@@ -17,7 +17,7 @@ Metrics available currently include CPU usage, bytes written and read, and
 number of processes in each group.  They come with plenty of caveats, see
 either the Linux kernel documentation or man 5 proc.
 
-CPU usage comes from /proc/[pid]stat fields utime (user time) and stime (system
+CPU usage comes from /proc/[pid]/stat fields utime (user time) and stime (system
 time.)  It has been translated into fractional seconds of CPU consumed during
 the polling interval.
 

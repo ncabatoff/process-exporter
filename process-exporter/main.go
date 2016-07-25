@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	// "github.com/ncabatoff/gopsutil/process" // use my fork until shirou/gopsutil issue#235 fixed, but needs branch fix-internal-pkgref
+	"github.com/ncabatoff/fakescraper"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/shirou/gopsutil/process"
 )
@@ -78,11 +78,6 @@ var (
 )
 
 type (
-	dummyResponseWriter struct {
-		bytes.Buffer
-		header http.Header
-	}
-
 	nameMapper struct {
 		mapping map[string]*regexp.Regexp
 	}
@@ -100,13 +95,6 @@ func (nm nameMapper) get(name, cmdline string) string {
 		}
 	}
 	return name
-}
-
-func (d *dummyResponseWriter) Header() http.Header {
-	return d.header
-}
-
-func (d *dummyResponseWriter) WriteHeader(code int) {
 }
 
 func parseNameMapper(s string) (*nameMapper, error) {
@@ -184,20 +172,12 @@ func main() {
 	prometheus.MustRegister(pc)
 
 	if *onceToStdout {
-		drw := dummyResponseWriter{header: make(http.Header)}
-		httpreq, err := http.NewRequest("GET", "/metrics", nil)
-		if err != nil {
-			log.Fatalf("Error building request: %v", err)
-		}
-
-		prometheus.Handler().ServeHTTP(&drw, httpreq)
-		drw.Buffer.Truncate(0)
-
 		// We throw away the first result because that first collection primes the pump, and
 		// otherwise we won't see our counter metrics.  This is specific to the implementation
 		// of NamedProcessCollector.Collect().
-		prometheus.Handler().ServeHTTP(&drw, httpreq)
-		fmt.Print(drw.String())
+		fs := fakescraper.NewFakeScraper()
+		fs.Scrape()
+		fmt.Print(fs.Scrape())
 		return
 	}
 

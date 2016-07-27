@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	// "github.com/ncabatoff/gopsutil/process" // use my fork until shirou/gopsutil issue#235 fixed, but needs branch fix-internal-pkgref
 	"github.com/ncabatoff/fakescraper"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/shirou/gopsutil/process"
@@ -38,7 +37,7 @@ procnames is a comma-seperated list of process names that should get their own
 metrics.  Even if no such processes are running, metrics will be created with a
 groupname for each of the specific process names.
 
-minIoPercent and minCpuPercent look at the total IO and CPU observed during a
+minReadPercent and minCpuPercent look at the total IO and CPU observed during a
 collection cycle.  If a process that are currently in the "other" bucket 
 has IO or CPU from that cycle which exceeds the threshold, it gets moved out
 of the "other" bucket.
@@ -135,8 +134,10 @@ func main() {
 			"Don't bind, instead just print the metrics once to stdout and exit")
 		procNames = flag.String("procnames", "",
 			"comma-seperated list of process names to monitor")
-		minIoPercent = flag.Float64("min-io-pct", 10.0,
-			"percent of total I/O seen needed to promote out of 'other'")
+		minReadPercent = flag.Float64("min-read-pct", 10.0,
+			"percent of total read bytes seen needed to promote out of 'other'")
+		minWritePercent = flag.Float64("min-write-pct", 10.0,
+			"percent of total write bytes seen needed to promote out of 'other'")
 		minCpuPercent = flag.Float64("min-cpu-pct", 10.0,
 			"percent of total CPU seen needed to promote out of 'other'")
 		nameMapping = flag.String("namemapping", "",
@@ -163,7 +164,7 @@ func main() {
 		log.Fatalf("Error parsing -namemapping argument '%s': %v", *nameMapping, err)
 	}
 
-	pc := NewProcessCollector(*minIoPercent, *minCpuPercent, names, namemapper)
+	pc := NewProcessCollector(*minReadPercent, *minWritePercent, *minCpuPercent, names, namemapper)
 
 	if err := pc.Init(); err != nil {
 		log.Fatalf("Error initializing: %v", err)
@@ -199,9 +200,10 @@ func main() {
 
 type (
 	NamedProcessCollector struct {
-		minIoPercent  float64
-		minCpuPercent float64
-		wantProcNames map[string]struct{}
+		minReadPercent  float64
+		minWritePercent float64
+		minCpuPercent   float64
+		wantProcNames   map[string]struct{}
 		*nameMapper
 		// track how much was seen last time so we can report the delta
 		groupStats map[string]counts
@@ -239,6 +241,7 @@ type (
 		lastUpdate time.Time
 		lastvals   procSum
 		accum      counts
+		lastaccum  counts
 	}
 
 	processId struct {
@@ -260,14 +263,15 @@ func (ps procSum) String() string {
 	return fmt.Sprintf("%20s %20s %7.0f %12d %12d", ps.name, cmd, ps.cpu, ps.readbytes, ps.writebytes)
 }
 
-func NewProcessCollector(minIoPercent float64, minCpuPercent float64, procnames []string, nameMapper *nameMapper) *NamedProcessCollector {
+func NewProcessCollector(minReadPercent float64, minWritePercent float64, minCpuPercent float64, procnames []string, nameMapper *nameMapper) *NamedProcessCollector {
 	pc := NamedProcessCollector{
-		minIoPercent:  minIoPercent,
-		minCpuPercent: minCpuPercent,
-		wantProcNames: make(map[string]struct{}),
-		nameMapper:    nameMapper,
-		groupStats:    make(map[string]counts),
-		tracker:       NewProcTracker(),
+		minReadPercent:  minReadPercent,
+		minWritePercent: minWritePercent,
+		minCpuPercent:   minCpuPercent,
+		wantProcNames:   make(map[string]struct{}),
+		nameMapper:      nameMapper,
+		groupStats:      make(map[string]counts),
+		tracker:         NewProcTracker(),
 	}
 	for _, name := range procnames {
 		pc.wantProcNames[name] = struct{}{}
@@ -308,8 +312,8 @@ func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
 			// become smaller.  We'll cheat by simply pretending there was no change to the
 			// counter when that happens.
 
-			dcpu := gcounts.cpu - grpstat.cpu
-			if dcpu < 0 {
+			dcpu := gcounts.cpu
+			if dcpu-grpstat.cpu < 0 {
 				dcpu = 0
 			}
 			ch <- prometheus.MustNewConstMetric(cpusecsDesc,
@@ -317,8 +321,8 @@ func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
 				dcpu,
 				gname)
 
-			drbytes := gcounts.readbytes - grpstat.readbytes
-			if drbytes < 0 {
+			drbytes := gcounts.readbytes
+			if drbytes-grpstat.readbytes < 0 {
 				drbytes = 0
 			}
 			ch <- prometheus.MustNewConstMetric(readbytesDesc,
@@ -326,8 +330,8 @@ func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
 				float64(drbytes),
 				gname)
 
-			dwbytes := gcounts.writebytes - grpstat.writebytes
-			if dwbytes < 0 {
+			dwbytes := gcounts.writebytes
+			if dwbytes-grpstat.writebytes < 0 {
 				dwbytes = 0
 			}
 			ch <- prometheus.MustNewConstMetric(writebytesDesc,
@@ -346,18 +350,19 @@ func (p *NamedProcessCollector) getGroups() map[string]groupcounts {
 		log.Fatalf("Error reading procs: %v", err)
 	}
 
-	totdeltaio := float64(delta.readbytes + delta.writebytes)
-	totdeltacpu := float64(delta.cpu + delta.cpu)
 	gcounts := make(map[string]groupcounts)
 
 	for _, pinfo := range p.tracker.procs {
 		gname := p.nameMapper.get(pinfo.lastvals.name, pinfo.lastvals.cmdline)
 		if _, ok := p.wantProcNames[gname]; !ok {
-			deltaio := float64(pinfo.accum.readbytes + pinfo.accum.writebytes)
-			iopct := 100 * deltaio / totdeltaio
-			deltacpu := float64(pinfo.accum.readbytes + pinfo.accum.writebytes)
-			cpupct := 100 * deltacpu / totdeltacpu
-			if iopct >= p.minIoPercent || cpupct >= p.minCpuPercent/totdeltacpu {
+			deltawrite := float64(pinfo.lastaccum.writebytes)
+			writepct := 100 * deltawrite / float64(delta.writebytes)
+			deltaread := float64(pinfo.lastaccum.readbytes)
+			readpct := 100 * deltaread / float64(delta.readbytes)
+			deltacpu := float64(pinfo.lastaccum.cpu)
+			cpupct := 100 * deltacpu / float64(delta.cpu)
+			if readpct >= p.minReadPercent || writepct >= p.minWritePercent || cpupct >= p.minCpuPercent {
+				log.Printf("name=%s readpct=%.1f cpupct=%.1f dwrite=%.1f tdwrite=%d dread=%.1f tdread=%d dcpu=%.1f tdcpu=%.1f", gname, readpct, cpupct, deltawrite, delta.writebytes, deltaread, delta.readbytes, deltacpu, delta.cpu)
 				p.wantProcNames[gname] = struct{}{}
 			} else {
 				gname = "other"
@@ -400,24 +405,26 @@ func (t procTracker) update() (delta counts, err error) {
 		}
 		procid := processId{pid, psum.startTime}
 
-		var newaccum counts
+		var newaccum, lastaccum counts
 		if cur, ok := t.procs[procid]; ok {
-			newaccum = cur.accum
-
 			dcpu := psum.cpu - cur.lastvals.cpu
-			newaccum.cpu += dcpu
-			delta.cpu += dcpu
-
 			drbytes := psum.readbytes - cur.lastvals.readbytes
-			newaccum.readbytes += drbytes
-			delta.readbytes += drbytes
-
 			dwbytes := psum.writebytes - cur.lastvals.writebytes
-			newaccum.writebytes += dwbytes
+
+			delta.cpu += dcpu
+			delta.readbytes += drbytes
 			delta.writebytes += dwbytes
+
+			lastaccum = counts{cpu: dcpu, readbytes: drbytes, writebytes: dwbytes}
+			newaccum = counts{
+				cpu:        cur.accum.cpu + lastaccum.cpu,
+				readbytes:  cur.accum.readbytes + lastaccum.readbytes,
+				writebytes: cur.accum.writebytes + lastaccum.writebytes,
+			}
+
 			// log.Printf("%9d %20s %.1f %6d %6d", procid.pid, psum.name, dcpu, drbytes, dwbytes)
 		}
-		t.procs[procid] = trackedProc{lastUpdate: now, lastvals: psum, accum: newaccum}
+		t.procs[procid] = trackedProc{lastUpdate: now, lastvals: psum, accum: newaccum, lastaccum: lastaccum}
 	}
 
 	for procid, pinfo := range t.procs {

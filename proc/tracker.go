@@ -2,19 +2,10 @@ package proc
 
 import (
 	"fmt"
-	"github.com/prometheus/procfs"
 	"time"
 )
 
 type (
-	processId struct {
-		// UNIX process id
-		pid int
-		// The time the process started after system boot, the value is expressed
-		// in clock ticks.
-		startTime uint64
-	}
-
 	Counts struct {
 		Cpu        float64
 		ReadBytes  uint64
@@ -27,7 +18,7 @@ type (
 	}
 
 	Tracker struct {
-		Procs map[processId]TrackedProc
+		Procs map[ProcId]TrackedProc
 		accum Counts
 	}
 
@@ -35,26 +26,26 @@ type (
 		// lastUpdate is used internally during the update cycle to find which procs have exited
 		lastUpdate time.Time
 		// lastvals is the procSum most recently obtained for this proc, i.e. its current metrics
-		lastvals procSum
+		lastvals ProcInfo
 		// accum is the total CPU and IO accrued
 		accum Counts
 	}
 )
 
 func (tp *TrackedProc) GetName() string {
-	return tp.lastvals.name
+	return tp.lastvals.Name
 }
 
 func (tp *TrackedProc) GetCmdLine() []string {
-	return tp.lastvals.cmdline
+	return tp.lastvals.Cmdline
 }
 
 func (tp *TrackedProc) GetStats() (Counts, Memory) {
-	return tp.accum, Memory{Resident: tp.lastvals.memresident, Virtual: tp.lastvals.memvirtual}
+	return tp.accum, Memory{Resident: tp.lastvals.ResidentBytes, Virtual: tp.lastvals.VirtualBytes}
 }
 
 func NewTracker() *Tracker {
-	return &Tracker{make(map[processId]TrackedProc), Counts{}}
+	return &Tracker{make(map[ProcId]TrackedProc), Counts{}}
 }
 
 // Scan /proc and update oneself.  Rather than allocating a new map each time to detect procs
@@ -62,24 +53,29 @@ func NewTracker() *Tracker {
 // as a second pass we traverse the map looking for stale procs and removing them.
 
 func (t Tracker) Update() error {
-	procs, err := procfs.AllProcs()
-	if err != nil {
-		return fmt.Errorf("Error reading procs: %v", err)
-	}
-
 	now := time.Now()
-	for _, proc := range procs {
-		psum, err := getProcSummary(proc)
+	allProcs := AllProcs()
+	for allProcs.Next() {
+		procId, err := allProcs.GetProcId()
 		if err != nil {
 			continue
 		}
-		xpid := processId{proc.PID, psum.startTime}
+
+		metrics, err := allProcs.GetMetrics()
+		if err != nil {
+			continue
+		}
+
+		static, err := allProcs.GetStatic()
+		if err != nil {
+			continue
+		}
 
 		var newaccum, lastaccum Counts
-		if cur, ok := t.Procs[xpid]; ok {
-			dcpu := psum.cpu - cur.lastvals.cpu
-			drbytes := psum.readbytes - cur.lastvals.readbytes
-			dwbytes := psum.writebytes - cur.lastvals.writebytes
+		if cur, ok := t.Procs[procId]; ok {
+			dcpu := metrics.CpuTime - cur.lastvals.CpuTime
+			drbytes := metrics.ReadBytes - cur.lastvals.ReadBytes
+			dwbytes := metrics.WriteBytes - cur.lastvals.WriteBytes
 
 			lastaccum = Counts{Cpu: dcpu, ReadBytes: drbytes, WriteBytes: dwbytes}
 			newaccum = Counts{
@@ -90,12 +86,17 @@ func (t Tracker) Update() error {
 
 			// log.Printf("%9d %20s %.1f %6d %6d", xpid.pid, psum.name, dCpu, drbytes, dwbytes)
 		}
-		t.Procs[xpid] = TrackedProc{lastUpdate: now, lastvals: psum, accum: newaccum}
+		info := ProcInfo{static, metrics}
+		t.Procs[procId] = TrackedProc{lastUpdate: now, lastvals: info, accum: newaccum}
+	}
+	err := allProcs.Close()
+	if err != nil {
+		return fmt.Errorf("Error reading procs: %v", err)
 	}
 
-	for xpid, pinfo := range t.Procs {
+	for procId, pinfo := range t.Procs {
 		if pinfo.lastUpdate != now {
-			delete(t.Procs, xpid)
+			delete(t.Procs, procId)
 		}
 	}
 

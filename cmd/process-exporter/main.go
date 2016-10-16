@@ -356,18 +356,34 @@ func (p *NamedProcessCollector) getGroups() map[string]groupcounts {
 	for _, pinfo := range p.tracker.procs {
 		gname := p.nameMapper.get(pinfo.lastvals.name, pinfo.lastvals.cmdline)
 		if _, ok := p.wantProcNames[gname]; !ok {
-			deltawrite := float64(pinfo.lastaccum.writebytes)
-			writepct := 100 * deltawrite / float64(delta.writebytes)
-			deltaread := float64(pinfo.lastaccum.readbytes)
-			readpct := 100 * deltaread / float64(delta.readbytes)
-			deltacpu := float64(pinfo.lastaccum.cpu)
-			cpupct := 100 * deltacpu / float64(delta.cpu)
-			if readpct >= p.minReadPercent || writepct >= p.minWritePercent || cpupct >= p.minCpuPercent {
-				log.Printf("name=%s readpct=%.1f cpupct=%.1f dwrite=%.1f tdwrite=%d dread=%.1f tdread=%d dcpu=%.1f tdcpu=%.1f", gname, readpct, cpupct, deltawrite, delta.writebytes, deltaread, delta.readbytes, deltacpu, delta.cpu)
-				p.wantProcNames[gname] = struct{}{}
-			} else {
-				gname = "other"
+			if p.minReadPercent < 101 {
+				deltaread := float64(pinfo.lastaccum.readbytes)
+				readpct := 100 * deltaread / float64(delta.readbytes)
+				if readpct >= p.minReadPercent {
+					log.Printf("name=%s readpct=%.1f dread=%.1f tdread=%d", gname, readpct, deltaread, delta.readbytes)
+					p.wantProcNames[gname] = struct{}{}
+					continue
+				}
 			}
+			if p.minWritePercent < 101 {
+				deltawrite := float64(pinfo.lastaccum.writebytes)
+				writepct := 100 * deltawrite / float64(delta.writebytes)
+				if writepct >= p.minWritePercent {
+					log.Printf("name=%s writepct=%.1f dwrite=%.1f tdwrite=%d", gname, writepct, deltawrite, delta.writebytes)
+					p.wantProcNames[gname] = struct{}{}
+					continue
+				}
+			}
+			if p.minCpuPercent < 101 {
+				deltacpu := float64(pinfo.lastaccum.cpu)
+				cpupct := 100 * deltacpu / float64(delta.cpu)
+				if cpupct >= p.minCpuPercent {
+					log.Printf("name=%s cpupct=%.1f dcpu=%.1f tdcpu=%.1f", gname, cpupct, deltacpu, delta.cpu)
+					p.wantProcNames[gname] = struct{}{}
+					continue
+				}
+			}
+			gname = "other"
 		}
 
 		cur := gcounts[gname]

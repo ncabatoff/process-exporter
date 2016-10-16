@@ -13,7 +13,8 @@ import (
 
 	"github.com/ncabatoff/fakescraper"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/shirou/gopsutil/process"
+	// "github.com/shirou/gopsutil/process"
+	"github.com/prometheus/procfs"
 )
 
 func printManual() {
@@ -221,7 +222,7 @@ type (
 		procs       int
 		memresident uint64
 		memvirtual  uint64
-		memswap     uint64
+		// memswap     uint64
 	}
 
 	// procSum contains data read from /proc/pid/*
@@ -234,7 +235,7 @@ type (
 		startTime   time.Time
 		memresident uint64
 		memvirtual  uint64
-		memswap     uint64
+		// memswap     uint64
 	}
 
 	trackedProc struct {
@@ -245,7 +246,7 @@ type (
 	}
 
 	processId struct {
-		pid       int32
+		pid       int
 		startTime time.Time
 	}
 
@@ -302,8 +303,8 @@ func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
 			prometheus.GaugeValue, float64(gcounts.memresident), gname, "resident")
 		ch <- prometheus.MustNewConstMetric(membytesDesc,
 			prometheus.GaugeValue, float64(gcounts.memvirtual), gname, "virtual")
-		ch <- prometheus.MustNewConstMetric(membytesDesc,
-			prometheus.GaugeValue, float64(gcounts.memswap), gname, "swap")
+		// ch <- prometheus.MustNewConstMetric(membytesDesc,
+		// 	prometheus.GaugeValue, float64(gcounts.memswap), gname, "swap")
 
 		if grpstat, ok := p.groupStats[gname]; ok {
 			// It's convenient to treat cpu, readbytes, etc as counters so we can use rate().
@@ -373,7 +374,7 @@ func (p *NamedProcessCollector) getGroups() map[string]groupcounts {
 		cur.procs++
 		cur.memresident += pinfo.lastvals.memresident
 		cur.memvirtual += pinfo.lastvals.memvirtual
-		cur.memswap += pinfo.lastvals.memswap
+		// cur.memswap += pinfo.lastvals.memswap
 		cur.counts.cpu += pinfo.accum.cpu
 		cur.counts.readbytes += pinfo.accum.readbytes
 		cur.counts.writebytes += pinfo.accum.writebytes
@@ -392,18 +393,18 @@ func NewProcTracker() *procTracker {
 // as a second pass we traverse the map looking for stale procs and removing them.
 
 func (t procTracker) update() (delta counts, err error) {
-	pids, err := process.Pids()
+	procs, err := procfs.AllProcs()
 	if err != nil {
 		return delta, fmt.Errorf("Error reading procs: %v", err)
 	}
 
 	now := time.Now()
-	for _, pid := range pids {
-		psum, err := getProcSummary(pid)
+	for _, proc := range procs {
+		psum, err := getProcSummary(proc)
 		if err != nil {
 			continue
 		}
-		procid := processId{pid, psum.startTime}
+		procid := processId{proc.PID, psum.startTime}
 
 		var newaccum, lastaccum counts
 		if cur, ok := t.procs[procid]; ok {
@@ -441,20 +442,15 @@ var (
 	ErrNoCommand = errors.New("proc has empty cmdline")
 )
 
-func getProcSummary(pid int32) (procSum, error) {
-	proc, err := process.NewProcess(pid)
+func getProcSummary(proc procfs.Proc) (procSum, error) {
 	var psum procSum
-	if err != nil {
-		// errors happens so routinely (e.g. when we race) that it's not worth reporting IMO
-		return psum, err
-	}
 
-	times, err := proc.Times()
+	stat, err := proc.NewStat()
 	if err != nil {
 		return psum, err
 	}
 
-	name, err := proc.Name()
+	name, err := proc.Comm()
 	if err != nil {
 		return psum, err
 	}
@@ -465,41 +461,36 @@ func getProcSummary(pid int32) (procSum, error) {
 		return psum, ErrUnnamed
 	}
 
-	cmdline, err := proc.Cmdline()
+	cmdline, err := proc.CmdLine()
 	if err != nil {
 		return psum, err
 	}
 
-	if cmdline == "" {
+	if len(cmdline) == 0 {
 		// these all appear to be kernel processes, which people generally don't care about
 		// monitoring directly (i.e. the system OS metrics suffice)
 		return psum, ErrNoCommand
 	}
 
-	ios, err := proc.IOCounters()
+	ios, err := proc.NewIO()
 	if err != nil {
 		return psum, err
 	}
 
-	ctime, err := proc.CreateTime()
-	if err != nil {
-		return psum, err
-	}
-
-	meminfo, err := proc.MemoryInfo()
+	ctime, err := stat.StartTime()
 	if err != nil {
 		return psum, err
 	}
 
 	psum.name = name
-	psum.cmdline = cmdline
-	psum.cpu = times.User + times.System
+	psum.cmdline = strings.Join(cmdline, " ")
+	psum.cpu = stat.CPUTime()
 	psum.writebytes = ios.WriteBytes
 	psum.readbytes = ios.ReadBytes
-	psum.startTime = time.Unix(ctime, 0)
-	psum.memresident = meminfo.RSS
-	psum.memvirtual = meminfo.VMS
-	psum.memswap = meminfo.Swap
+	psum.startTime = time.Unix(int64(ctime), 0)
+	psum.memresident = uint64(stat.ResidentMemory())
+	psum.memvirtual = uint64(stat.VirtualMemory())
+	// psum.memswap = meminfo.Swap
 
 	return psum, nil
 }

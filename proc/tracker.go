@@ -24,6 +24,7 @@ type (
 	// value in the Tracked map to nil.
 	Tracker struct {
 		Tracked map[ProcId]*TrackedProc
+		ProcIds map[int]ProcId
 		Filter  FilterFunc
 	}
 
@@ -33,7 +34,8 @@ type (
 		// lastvals is the procSum most recently obtained for this proc, i.e. its current metrics
 		info ProcInfo
 		// accum is the total CPU and IO accrued
-		accum Counts
+		accum     Counts
+		GroupName string
 	}
 )
 
@@ -50,15 +52,21 @@ func (tp *TrackedProc) GetStats() (Counts, Memory) {
 }
 
 func NewTracker() *Tracker {
-	return &Tracker{Tracked: make(map[ProcId]*TrackedProc)}
+	return &Tracker{Tracked: make(map[ProcId]*TrackedProc), ProcIds: make(map[int]ProcId)}
 }
 
 // Scan procs and update oneself.  Rather than allocating a new map each time to detect procs
 // that have disappeared, we bump the last update time on those that are still present.  Then
 // as a second pass we traverse the map looking for stale procs and removing them.
 
-func (t Tracker) Update(procs Procs) error {
+func (t *Tracker) Track(groupName string, idinfo ProcIdInfo) {
+	info := ProcInfo{idinfo.ProcStatic, idinfo.ProcMetrics}
+	t.Tracked[idinfo.ProcId] = &TrackedProc{GroupName: groupName, info: info}
+}
+
+func (t *Tracker) Update(procs Procs) ([]ProcIdInfo, error) {
 	now := time.Now()
+	var newProcs []ProcIdInfo
 	for procs.Next() {
 		procId, err := procs.GetProcId()
 		if err != nil {
@@ -90,28 +98,37 @@ func (t Tracker) Update(procs Procs) error {
 				WriteBytes: last.accum.WriteBytes + lastaccum.WriteBytes,
 			}
 
-			info := ProcInfo{ProcStatic: last.info.ProcStatic, ProcMetrics: metrics}
-			*(t.Tracked[procId]) = TrackedProc{lastUpdate: now, info: info, accum: newaccum}
+			last.info.ProcMetrics = metrics
+			last.lastUpdate = now
+			last.accum = newaccum
 		} else {
 			static, err := procs.GetStatic()
 			if err != nil {
 				continue
 			}
-			info := ProcInfo{ProcStatic: static, ProcMetrics: metrics}
-			t.Tracked[procId] = &TrackedProc{lastUpdate: now, info: info}
+			newProcs = append(newProcs, ProcIdInfo{procId, static, metrics})
+
+			// Is this a new process with the same pid as one we already know?
+			if oldProcId, ok := t.ProcIds[procId.Pid]; ok {
+				// Delete it from known, otherwise the cleanup below will remove the
+				// ProcIds entry we're about to create
+				delete(t.Tracked, oldProcId)
+			}
+			t.ProcIds[procId.Pid] = procId
 		}
 
 	}
 	err := procs.Close()
 	if err != nil {
-		return fmt.Errorf("Error reading procs: %v", err)
+		return nil, fmt.Errorf("Error reading procs: %v", err)
 	}
 
 	for procId, pinfo := range t.Tracked {
 		if pinfo.lastUpdate != now {
 			delete(t.Tracked, procId)
+			delete(t.ProcIds, procId.Pid)
 		}
 	}
 
-	return nil
+	return newProcs, nil
 }

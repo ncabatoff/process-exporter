@@ -231,8 +231,30 @@ func NewProcessCollector(procnames []string, n namer) *NamedProcessCollector {
 }
 
 func (p *NamedProcessCollector) Init() error {
-	err := p.tracker.Update(proc.AllProcs())
-	return err
+	return p.update()
+}
+
+func (p *NamedProcessCollector) update() error {
+	newProcs, err := p.tracker.Update(proc.AllProcs())
+	if err != nil {
+		return err
+	}
+	for _, idinfo := range newProcs {
+		gname := p.namer.Name(nameAndCmdline{idinfo.Name, idinfo.Cmdline})
+		if _, ok := p.wantProcNames[gname]; !ok {
+			continue
+		}
+
+		p.tracker.Track(gname, idinfo)
+	}
+	for _, idinfo := range newProcs {
+		ppid := idinfo.ParentPid
+		pProcId := p.tracker.ProcIds[ppid]
+		if tproc, ok := p.tracker.Tracked[pProcId]; ok {
+			p.tracker.Track(tproc.GroupName, idinfo)
+		}
+	}
+	return nil
 }
 
 // Describe implements prometheus.Collector.
@@ -278,35 +300,23 @@ func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
 }
 
 func (p *NamedProcessCollector) getGroups() map[string]groupcounts {
-	err := p.tracker.Update(proc.AllProcs())
+	err := p.update()
 	if err != nil {
 		log.Fatalf("Error reading procs: %v", err)
 	}
 
 	gcounts := make(map[string]groupcounts)
 
-	for _, pinfo := range p.tracker.Tracked {
-		pname, cmdline := pinfo.GetName(), pinfo.GetCmdLine()
-		if _, ok := p.wantProcNames[pname]; !ok {
-			continue
-		}
-
-		gname := p.namer.Name(nameAndCmdline{pname, cmdline})
-		if pname != gname {
-			if _, ok := p.wantProcNames[gname]; !ok {
-				continue
-			}
-		}
-
-		cur := gcounts[gname]
+	for _, tinfo := range p.tracker.Tracked {
+		cur := gcounts[tinfo.GroupName]
 		cur.procs++
-		counts, mem := pinfo.GetStats()
+		counts, mem := tinfo.GetStats()
 		cur.memresident += mem.Resident
 		cur.memvirtual += mem.Virtual
 		cur.Counts.Cpu += counts.Cpu
 		cur.Counts.ReadBytes += counts.ReadBytes
 		cur.Counts.WriteBytes += counts.WriteBytes
-		gcounts[gname] = cur
+		gcounts[tinfo.GroupName] = cur
 	}
 
 	return gcounts

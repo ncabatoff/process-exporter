@@ -40,6 +40,12 @@ type (
 		ProcMetrics
 	}
 
+	ProcIdInfo struct {
+		ProcId
+		ProcStatic
+		ProcMetrics
+	}
+
 	// Proc wraps the details of the underlying procfs-reading library.
 	Proc interface {
 		// GetPid() returns the POSIX PID (process id).  They may be reused over time.

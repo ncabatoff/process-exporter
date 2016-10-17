@@ -231,7 +231,7 @@ func NewProcessCollector(procnames []string, n namer) *NamedProcessCollector {
 }
 
 func (p *NamedProcessCollector) Init() error {
-	err := p.tracker.Update()
+	err := p.tracker.Update(proc.AllProcs())
 	return err
 }
 
@@ -278,14 +278,14 @@ func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
 }
 
 func (p *NamedProcessCollector) getGroups() map[string]groupcounts {
-	err := p.tracker.Update()
+	err := p.tracker.Update(proc.AllProcs())
 	if err != nil {
 		log.Fatalf("Error reading procs: %v", err)
 	}
 
 	gcounts := make(map[string]groupcounts)
 
-	for _, pinfo := range p.tracker.Procs {
+	for _, pinfo := range p.tracker.Tracked {
 		pname, cmdline := pinfo.GetName(), pinfo.GetCmdLine()
 		if _, ok := p.wantProcNames[pname]; !ok {
 			continue

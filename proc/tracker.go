@@ -17,86 +17,99 @@ type (
 		Virtual  uint64
 	}
 
+	FilterFunc func(ProcStatic) bool
+
+	// Tracker observes processes.  When prompted it scans /proc and updates its records.
+	// Processes may be blacklisted such that they no longer get tracked by setting their
+	// value in the Tracked map to nil.
 	Tracker struct {
-		Procs map[ProcId]TrackedProc
-		accum Counts
+		Tracked map[ProcId]*TrackedProc
+		Filter  FilterFunc
 	}
 
 	TrackedProc struct {
 		// lastUpdate is used internally during the update cycle to find which procs have exited
 		lastUpdate time.Time
 		// lastvals is the procSum most recently obtained for this proc, i.e. its current metrics
-		lastvals ProcInfo
+		info ProcInfo
 		// accum is the total CPU and IO accrued
 		accum Counts
 	}
 )
 
 func (tp *TrackedProc) GetName() string {
-	return tp.lastvals.Name
+	return tp.info.Name
 }
 
 func (tp *TrackedProc) GetCmdLine() []string {
-	return tp.lastvals.Cmdline
+	return tp.info.Cmdline
 }
 
 func (tp *TrackedProc) GetStats() (Counts, Memory) {
-	return tp.accum, Memory{Resident: tp.lastvals.ResidentBytes, Virtual: tp.lastvals.VirtualBytes}
+	return tp.accum, Memory{Resident: tp.info.ResidentBytes, Virtual: tp.info.VirtualBytes}
 }
 
 func NewTracker() *Tracker {
-	return &Tracker{make(map[ProcId]TrackedProc), Counts{}}
+	return &Tracker{Tracked: make(map[ProcId]*TrackedProc)}
 }
 
-// Scan /proc and update oneself.  Rather than allocating a new map each time to detect procs
+// Scan procs and update oneself.  Rather than allocating a new map each time to detect procs
 // that have disappeared, we bump the last update time on those that are still present.  Then
 // as a second pass we traverse the map looking for stale procs and removing them.
 
-func (t Tracker) Update() error {
+func (t Tracker) Update(procs Procs) error {
 	now := time.Now()
-	allProcs := AllProcs()
-	for allProcs.Next() {
-		procId, err := allProcs.GetProcId()
+	for procs.Next() {
+		procId, err := procs.GetProcId()
 		if err != nil {
 			continue
 		}
 
-		metrics, err := allProcs.GetMetrics()
+		last, known := t.Tracked[procId]
+
+		// Are we ignoring this proc?
+		if known && last == nil {
+			continue
+		}
+
+		metrics, err := procs.GetMetrics()
 		if err != nil {
 			continue
 		}
 
-		static, err := allProcs.GetStatic()
-		if err != nil {
-			continue
-		}
-
-		var newaccum, lastaccum Counts
-		if cur, ok := t.Procs[procId]; ok {
-			dcpu := metrics.CpuTime - cur.lastvals.CpuTime
-			drbytes := metrics.ReadBytes - cur.lastvals.ReadBytes
-			dwbytes := metrics.WriteBytes - cur.lastvals.WriteBytes
+		if known {
+			var newaccum, lastaccum Counts
+			dcpu := metrics.CpuTime - last.info.CpuTime
+			drbytes := metrics.ReadBytes - last.info.ReadBytes
+			dwbytes := metrics.WriteBytes - last.info.WriteBytes
 
 			lastaccum = Counts{Cpu: dcpu, ReadBytes: drbytes, WriteBytes: dwbytes}
 			newaccum = Counts{
-				Cpu:        cur.accum.Cpu + lastaccum.Cpu,
-				ReadBytes:  cur.accum.ReadBytes + lastaccum.ReadBytes,
-				WriteBytes: cur.accum.WriteBytes + lastaccum.WriteBytes,
+				Cpu:        last.accum.Cpu + lastaccum.Cpu,
+				ReadBytes:  last.accum.ReadBytes + lastaccum.ReadBytes,
+				WriteBytes: last.accum.WriteBytes + lastaccum.WriteBytes,
 			}
 
-			// log.Printf("%9d %20s %.1f %6d %6d", xpid.pid, psum.name, dCpu, drbytes, dwbytes)
+			info := ProcInfo{ProcStatic: last.info.ProcStatic, ProcMetrics: metrics}
+			*(t.Tracked[procId]) = TrackedProc{lastUpdate: now, info: info, accum: newaccum}
+		} else {
+			static, err := procs.GetStatic()
+			if err != nil {
+				continue
+			}
+			info := ProcInfo{ProcStatic: static, ProcMetrics: metrics}
+			t.Tracked[procId] = &TrackedProc{lastUpdate: now, info: info}
 		}
-		info := ProcInfo{static, metrics}
-		t.Procs[procId] = TrackedProc{lastUpdate: now, lastvals: info, accum: newaccum}
+
 	}
-	err := allProcs.Close()
+	err := procs.Close()
 	if err != nil {
 		return fmt.Errorf("Error reading procs: %v", err)
 	}
 
-	for procId, pinfo := range t.Procs {
+	for procId, pinfo := range t.Tracked {
 		if pinfo.lastUpdate != now {
-			delete(t.Procs, procId)
+			delete(t.Tracked, procId)
 		}
 	}
 

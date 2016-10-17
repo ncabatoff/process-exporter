@@ -95,6 +95,7 @@ func (pi *procIterator) Next() bool {
 }
 
 func (pi *procIterator) Close() error {
+	pi.Next()
 	pi.procs = nil
 	return pi.err
 }
@@ -173,6 +174,7 @@ func (pi *procIterator) GetStatic() (ProcStatic, error) {
 	}, nil
 }
 
+// GetMetrics() implements Proc.
 func (pi *procIterator) GetMetrics() (ProcMetrics, error) {
 	io, err := pi.GetIo()
 	if err != nil {

@@ -68,31 +68,7 @@ type (
 	nameMapperRegex struct {
 		mapping map[string]*regexp.Regexp
 	}
-
-	nameAndCmdline struct {
-		name    string
-		cmdline []string
-	}
-
-	namer interface {
-		// Map returns the name to use for a given process
-		Name(nameAndCmdline) string
-	}
 )
-
-func (nm nameMapperRegex) Name(nacl nameAndCmdline) string {
-	if regex, ok := nm.mapping[nacl.name]; ok {
-		matches := regex.FindStringSubmatch(strings.Join(nacl.cmdline, " "))
-		if len(matches) > 1 {
-			for _, matchstr := range matches[1:] {
-				if matchstr != "" {
-					return nacl.name + ":" + matchstr
-				}
-			}
-		}
-	}
-	return nacl.name
-}
 
 func parseNameMapper(s string) (*nameMapperRegex, error) {
 	mapper := make(map[string]*regexp.Regexp)
@@ -202,59 +178,30 @@ func main() {
 
 type (
 	NamedProcessCollector struct {
-		wantProcNames map[string]struct{}
-		namer
-		// track how much was seen last time so we can report the delta
-		groupStats map[string]proc.Counts
-		tracker    *proc.Tracker
-	}
-
-	groupcounts struct {
-		proc.Counts
-		procs       int
-		memresident uint64
-		memvirtual  uint64
+		*proc.Grouper
 	}
 )
 
-func NewProcessCollector(procnames []string, n namer) *NamedProcessCollector {
-	pc := NamedProcessCollector{
-		wantProcNames: make(map[string]struct{}),
-		namer:         n,
-		groupStats:    make(map[string]proc.Counts),
-		tracker:       proc.NewTracker(),
+func (nm nameMapperRegex) Name(nacl proc.NameAndCmdline) string {
+	if regex, ok := nm.mapping[nacl.Name]; ok {
+		matches := regex.FindStringSubmatch(strings.Join(nacl.Cmdline, " "))
+		if len(matches) > 1 {
+			for _, matchstr := range matches[1:] {
+				if matchstr != "" {
+					return nacl.Name + ":" + matchstr
+				}
+			}
+		}
 	}
-	for _, name := range procnames {
-		pc.wantProcNames[name] = struct{}{}
-	}
-	return &pc
+	return nacl.Name
+}
+
+func NewProcessCollector(procnames []string, n proc.Namer) *NamedProcessCollector {
+	return &NamedProcessCollector{proc.NewGrouper(procnames, n)}
 }
 
 func (p *NamedProcessCollector) Init() error {
-	return p.update()
-}
-
-func (p *NamedProcessCollector) update() error {
-	newProcs, err := p.tracker.Update(proc.AllProcs())
-	if err != nil {
-		return err
-	}
-	for _, idinfo := range newProcs {
-		gname := p.namer.Name(nameAndCmdline{idinfo.Name, idinfo.Cmdline})
-		if _, ok := p.wantProcNames[gname]; !ok {
-			continue
-		}
-
-		p.tracker.Track(gname, idinfo)
-	}
-	for _, idinfo := range newProcs {
-		ppid := idinfo.ParentPid
-		pProcId := p.tracker.ProcIds[ppid]
-		if tproc, ok := p.tracker.Tracked[pProcId]; ok {
-			p.tracker.Track(tproc.GroupName, idinfo)
-		}
-	}
-	return nil
+	return p.Update()
 }
 
 // Describe implements prometheus.Collector.
@@ -275,15 +222,22 @@ func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(d, prometheus.CounterValue, val, label)
 	}
 
-	for gname, gcounts := range p.getGroups() {
-		ch <- prometheus.MustNewConstMetric(numprocsDesc,
-			prometheus.GaugeValue, float64(gcounts.procs), gname)
-		ch <- prometheus.MustNewConstMetric(membytesDesc,
-			prometheus.GaugeValue, float64(gcounts.memresident), gname, "resident")
-		ch <- prometheus.MustNewConstMetric(membytesDesc,
-			prometheus.GaugeValue, float64(gcounts.memvirtual), gname, "virtual")
+	err := p.Update()
+	if err != nil {
+		// TODO inc scrape failure
+		log.Printf("error reading procs: %v", err)
+		return
+	}
 
-		if grpstat, ok := p.groupStats[gname]; ok {
+	for gname, gcounts := range p.Groups() {
+		ch <- prometheus.MustNewConstMetric(numprocsDesc,
+			prometheus.GaugeValue, float64(gcounts.Procs), gname)
+		ch <- prometheus.MustNewConstMetric(membytesDesc,
+			prometheus.GaugeValue, float64(gcounts.Memresident), gname, "resident")
+		ch <- prometheus.MustNewConstMetric(membytesDesc,
+			prometheus.GaugeValue, float64(gcounts.Memvirtual), gname, "virtual")
+
+		if grpstat, ok := p.GroupStats[gname]; ok {
 			// It's convenient to treat Cpu, ReadBytes, etc as counters so we can use rate().
 			// In practice it doesn't quite work because processes can exit while their group
 			// persists, and with that pid's absence our summed value across the group will
@@ -295,29 +249,6 @@ func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
 			counter(WriteBytesDesc, float64(gcounts.WriteBytes), float64(grpstat.WriteBytes), gname)
 		}
 
-		p.groupStats[gname] = gcounts.Counts
+		p.GroupStats[gname] = gcounts.Counts
 	}
-}
-
-func (p *NamedProcessCollector) getGroups() map[string]groupcounts {
-	err := p.update()
-	if err != nil {
-		log.Fatalf("Error reading procs: %v", err)
-	}
-
-	gcounts := make(map[string]groupcounts)
-
-	for _, tinfo := range p.tracker.Tracked {
-		cur := gcounts[tinfo.GroupName]
-		cur.procs++
-		counts, mem := tinfo.GetStats()
-		cur.memresident += mem.Resident
-		cur.memvirtual += mem.Virtual
-		cur.Counts.Cpu += counts.Cpu
-		cur.Counts.ReadBytes += counts.ReadBytes
-		cur.Counts.WriteBytes += counts.WriteBytes
-		gcounts[tinfo.GroupName] = cur
-	}
-
-	return gcounts
 }

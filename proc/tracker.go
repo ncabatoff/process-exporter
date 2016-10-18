@@ -17,24 +17,27 @@ type (
 		Virtual  uint64
 	}
 
-	FilterFunc func(ProcStatic) bool
-
-	// Tracker observes processes.  When prompted it scans /proc and updates its records.
-	// Processes may be blacklisted such that they no longer get tracked by setting their
-	// value in the Tracked map to nil.
+	// Tracker tracks processes and records metrics.
 	Tracker struct {
+		// Tracked holds the processes are being monitored.  Processes
+		// may be blacklisted such that they no longer get tracked by
+		// setting their value in the Tracked map to nil.
 		Tracked map[ProcId]*TrackedProc
+		// ProcIds is a map from pid to ProcId.  This is a convenience
+		// to allow finding the Tracked entry of a parent process.
 		ProcIds map[int]ProcId
-		Filter  FilterFunc
 	}
 
+	// TrackedProc accumulates metrics for a process, as well as
+	// remembering an optional GroupName tag associated with it.
 	TrackedProc struct {
 		// lastUpdate is used internally during the update cycle to find which procs have exited
 		lastUpdate time.Time
-		// lastvals is the procSum most recently obtained for this proc, i.e. its current metrics
+		// info is the most recently obtained info for this proc
 		info ProcInfo
 		// accum is the total CPU and IO accrued
-		accum     Counts
+		accum Counts
+		// GroupName is an optional tag for this proc.
 		GroupName string
 	}
 )
@@ -55,14 +58,13 @@ func NewTracker() *Tracker {
 	return &Tracker{Tracked: make(map[ProcId]*TrackedProc), ProcIds: make(map[int]ProcId)}
 }
 
-// Scan procs and update oneself.  Rather than allocating a new map each time to detect procs
-// that have disappeared, we bump the last update time on those that are still present.  Then
-// as a second pass we traverse the map looking for stale procs and removing them.
-
 func (t *Tracker) Track(groupName string, idinfo ProcIdInfo) {
 	info := ProcInfo{idinfo.ProcStatic, idinfo.ProcMetrics}
 	t.Tracked[idinfo.ProcId] = &TrackedProc{GroupName: groupName, info: info}
 }
+
+// Scan procs and update metrics for those which are tracked.  Processes that have gone
+// away get removed from the Tracked map.  New processes are returned.
 
 func (t *Tracker) Update(procs Procs) ([]ProcIdInfo, error) {
 	now := time.Now()
@@ -123,7 +125,16 @@ func (t *Tracker) Update(procs Procs) ([]ProcIdInfo, error) {
 		return nil, fmt.Errorf("Error reading procs: %v", err)
 	}
 
+	// Rather than allocating a new map each time to detect procs that have
+	// disappeared, we bump the last update time on those that are still
+	// present.  Then as a second pass we traverse the map looking for
+	// stale procs and removing them.
 	for procId, pinfo := range t.Tracked {
+		if pinfo == nil {
+			// TODO is this a bug? we're not tracking the proc so we don't see it go away so ProcIds
+			// and Tracked are leaking?
+			continue
+		}
 		if pinfo.lastUpdate != now {
 			delete(t.Tracked, procId)
 			delete(t.ProcIds, procId.Pid)

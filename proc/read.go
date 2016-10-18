@@ -6,6 +6,7 @@ import (
 )
 
 type (
+	// ProcId uniquely identifies a process.
 	ProcId struct {
 		// UNIX process id
 		Pid int
@@ -75,6 +76,7 @@ type (
 		Proc
 	}
 
+	// procIterator implements the Procs interface using procfs.
 	procIterator struct {
 		procs   []procfs.Proc
 		idx     int

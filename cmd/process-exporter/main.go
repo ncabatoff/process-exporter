@@ -28,7 +28,14 @@ the process name and command line.  For example, using
 
 will make it so that each different python2 and java -jar invocation will be
 tracked with distinct metrics.  Processes whose remapped name is absent from
-the procnames list will be ignored.` + "\n")
+the procnames list will be ignored.
+
+The -children option makes it so that any process that otherwise isn't part of
+its own group becomes part of the first group found (if any) when walking the
+process tree upwards.  In other words, subprocesses resource usage gets
+accounted for as part of their parents.
+
+` + "\n")
 
 }
 
@@ -110,6 +117,8 @@ func main() {
 			"comma-seperated list of process names to monitor")
 		nameMapping = flag.String("namemapping", "",
 			"comma-seperated list, alternating process name and capturing regex to apply to cmdline")
+		children = flag.Bool("children", true,
+			"if a proc is tracked, track with it any children that aren't part of their own group")
 		man = flag.Bool("man", false,
 			"print manual")
 	)
@@ -142,7 +151,7 @@ func main() {
 		log.Fatalf("Error parsing -namemapping argument '%s': %v", *nameMapping, err)
 	}
 
-	pc := NewProcessCollector(names, namemapper)
+	pc := NewProcessCollector(names, *children, namemapper)
 
 	if err := pc.Init(); err != nil {
 		log.Fatalf("Error initializing: %v", err)
@@ -196,12 +205,12 @@ func (nm nameMapperRegex) Name(nacl proc.NameAndCmdline) string {
 	return nacl.Name
 }
 
-func NewProcessCollector(procnames []string, n proc.Namer) *NamedProcessCollector {
-	return &NamedProcessCollector{proc.NewGrouper(procnames, n)}
+func NewProcessCollector(procnames []string, children bool, n proc.Namer) *NamedProcessCollector {
+	return &NamedProcessCollector{proc.NewGrouper(procnames, children, n)}
 }
 
 func (p *NamedProcessCollector) Init() error {
-	return p.Update()
+	return p.Update(proc.AllProcs())
 }
 
 // Describe implements prometheus.Collector.
@@ -222,7 +231,7 @@ func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(d, prometheus.CounterValue, val, label)
 	}
 
-	err := p.Update()
+	err := p.Update(proc.AllProcs())
 	if err != nil {
 		// TODO inc scrape failure
 		log.Printf("error reading procs: %v", err)

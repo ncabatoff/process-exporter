@@ -1,5 +1,5 @@
 # process-exporter
-Prometheus exporter that mines /proc to report on selected processes 
+Prometheus exporter that mines /proc to report on selected processes.
 
 The premise for this exporter is that sometimes you have apps that are
 impractical to instrument directly, either because you don't control the code
@@ -26,3 +26,24 @@ These correspond to the fields read_bytes and write_bytes respectively.
 
 An example Grafana dashboard to view the metrics is available at https://grafana.net/dashboards/249
 
+## History
+
+An earlier version of this exporter had options to enable auto-discovery of
+which processes were consuming resources.  This functionality has been removed.
+These options were based on a percentage of resource usage, e.g. if an
+untracked process consumed X% of CPU during a scrape, start tracking processes
+with that name.  However during any given scrape it's likely that most
+processes are idle, so we could add a process that consumes minimal resources
+but which happened to be active during the interval preceding the current
+scrape.  Over time this means that a great many processes wind up being
+scraped, which becomes unmanageable to visualize.  This could be mitigated by
+looking at resource usage over longer intervals, but ultimately I didn't feel
+this feature was important enough to invest more time in at this point.  It may
+re-appear at some point in the future, but no promises.
+
+Another lost feature: the "other" group was used to count usage by non-tracked
+procs.  This was useful to get an idea of what wasn't being monitored.  But it
+comes at a high cost: if you know what processes you care about, you're wasting
+a lot of CPU to compute the usage of everything else that you don't care about.
+The new approach is to minimize resources expended on non-tracked processes and
+to require the user to whitelist the processes to track.  

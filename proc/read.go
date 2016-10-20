@@ -5,6 +5,10 @@ import (
 	"github.com/prometheus/procfs"
 )
 
+func newProcIdStatic(pid, ppid int, startTime uint64, name string, cmdline []string) ProcIdStatic {
+	return ProcIdStatic{ProcId{pid, startTime}, ProcStatic{name, cmdline, ppid}}
+}
+
 type (
 	// ProcId uniquely identifies a process.
 	ProcId struct {
@@ -66,8 +70,24 @@ type (
 		GetMetrics() (ProcMetrics, error)
 	}
 
-	// AllProcs is an iterator over a sequence of procs.
-	Procs interface {
+	// proc is a wrapper for procfs.Proc that caches results of some reads and implements Proc.
+	proc struct {
+		procfs.Proc
+		procid  *ProcId
+		stat    *procfs.ProcStat
+		cmdline []string
+		io      *procfs.ProcIO
+	}
+
+	procs interface {
+		get(int) Proc
+		length() int
+	}
+
+	procfsprocs []procfs.Proc
+
+	// ProcIter is an iterator over a sequence of procs.
+	ProcIter interface {
 		// Next returns true if the iterator is not exhausted.
 		Next() bool
 		// Close releases any resources the iterator uses.
@@ -76,102 +96,131 @@ type (
 		Proc
 	}
 
-	// procIterator implements the Procs interface using procfs.
+	// procIterator implements the ProcIter interface using procfs.
 	procIterator struct {
-		procs   []procfs.Proc
-		idx     int
-		err     error
-		procid  *ProcId
-		stat    *procfs.ProcStat
-		cmdline []string
-		io      *procfs.ProcIO
+		// procs is the list of Proc we're iterating over.
+		procs
+		// idx is the current iteration, i.e. it's an index into procs.
+		idx int
+		// err is set with an error when Next() fails.  It is not affected by failures accessing
+		// the current iteration variable, e.g. with GetProcId.
+		err error
+		// Proc is the current iteration variable, or nil if Next() has never been called or the
+		// iterator is exhausted.
+		Proc
 	}
+
+	procIdInfos []ProcIdInfo
 )
 
-func AllProcs() Procs {
-	procs, err := procfs.AllProcs()
+func procInfoIter(ps ...ProcIdInfo) ProcIter {
+	return &procIterator{procs: procIdInfos(ps), idx: -1}
+}
+
+func Info(p Proc) (ProcIdInfo, error) {
+	id, err := p.GetProcId()
 	if err != nil {
-		err = fmt.Errorf("Error reading procs: %v", err)
+		return ProcIdInfo{}, err
 	}
-	return &procIterator{procs: procs, err: err, idx: -1}
-}
-
-func (pi *procIterator) Next() bool {
-	pi.idx++
-	pi.stat, pi.cmdline, pi.io = nil, nil, nil
-	return pi.idx < len(pi.procs)
-}
-
-func (pi *procIterator) Close() error {
-	pi.Next()
-	pi.procs = nil
-	return pi.err
-}
-
-// GetPid() implements Proc.
-func (pi *procIterator) GetPid() int {
-	return pi.procs[pi.idx].PID
-}
-
-// GetStat() wraps and caches procfs.Proc.NewStat().
-func (pi *procIterator) GetStat() (procfs.ProcStat, error) {
-	if pi.stat != nil {
-		return *pi.stat, nil
-	}
-	proc := pi.procs[pi.idx]
-	stat, err := proc.NewStat()
+	static, err := p.GetStatic()
 	if err != nil {
-		return procfs.ProcStat{}, err
+		return ProcIdInfo{}, err
 	}
-	pi.stat = &stat
-	return stat, nil
-}
-
-// GetCmdLine() wraps and caches procfs.Proc.CmdLine().
-func (pi *procIterator) GetCmdLine() ([]string, error) {
-	if pi.cmdline != nil {
-		return pi.cmdline, nil
-	}
-	proc := pi.procs[pi.idx]
-	cmdline, err := proc.CmdLine()
+	metrics, err := p.GetMetrics()
 	if err != nil {
-		return nil, err
+		return ProcIdInfo{}, err
 	}
-	pi.cmdline = cmdline
-	return cmdline, nil
+	return ProcIdInfo{id, static, metrics}, nil
 }
 
-// GetIo() wraps and caches procfs.Proc.NewIO().
-func (pi *procIterator) GetIo() (procfs.ProcIO, error) {
-	if pi.io != nil {
-		return *pi.io, nil
-	}
-	proc := pi.procs[pi.idx]
-	io, err := proc.NewIO()
-	if err != nil {
-		return procfs.ProcIO{}, err
-	}
-	pi.io = &io
-	return io, nil
+func (p procIdInfos) get(i int) Proc {
+	return &p[i]
 }
 
-// GetProcId() implements Proc.
-func (pi *procIterator) GetProcId() (ProcId, error) {
-	stat, err := pi.GetStat()
-	if err != nil {
-		return ProcId{}, err
-	}
-
-	return ProcId{Pid: pi.GetPid(), StartTimeRel: stat.Starttime}, nil
+func (p procIdInfos) length() int {
+	return len(p)
 }
 
-// GetStatic() implements Proc.
-func (pi *procIterator) GetStatic() (ProcStatic, error) {
-	cmdline, err := pi.GetCmdLine()
+func (p ProcIdInfo) GetPid() int {
+	return p.ProcId.Pid
+}
+
+func (p ProcIdInfo) GetProcId() (ProcId, error) {
+	return p.ProcId, nil
+}
+
+func (p ProcIdInfo) GetStatic() (ProcStatic, error) {
+	return p.ProcStatic, nil
+}
+
+func (p ProcIdInfo) GetMetrics() (ProcMetrics, error) {
+	return p.ProcMetrics, nil
+}
+
+func (p procfsprocs) get(i int) Proc {
+	return &proc{Proc: p[i]}
+}
+
+func (p procfsprocs) length() int {
+	return len(p)
+}
+
+func (p *proc) GetPid() int {
+	return p.Proc.PID
+}
+
+func (p *proc) GetStat() (procfs.ProcStat, error) {
+	if p.stat == nil {
+		stat, err := p.Proc.NewStat()
+		if err != nil {
+			return procfs.ProcStat{}, err
+		}
+		p.stat = &stat
+	}
+
+	return *p.stat, nil
+}
+
+func (p *proc) GetProcId() (ProcId, error) {
+	if p.procid == nil {
+		stat, err := p.GetStat()
+		if err != nil {
+			return ProcId{}, err
+		}
+		p.procid = &ProcId{Pid: p.GetPid(), StartTimeRel: stat.Starttime}
+	}
+
+	return *p.procid, nil
+}
+
+func (p *proc) GetCmdLine() ([]string, error) {
+	if p.cmdline == nil {
+		cmdline, err := p.Proc.CmdLine()
+		if err != nil {
+			return nil, err
+		}
+		p.cmdline = cmdline
+	}
+	return p.cmdline, nil
+}
+
+func (p *proc) GetIo() (procfs.ProcIO, error) {
+	if p.io == nil {
+		io, err := p.Proc.NewIO()
+		if err != nil {
+			return procfs.ProcIO{}, err
+		}
+		p.io = &io
+	}
+	return *p.io, nil
+}
+
+func (p proc) GetStatic() (ProcStatic, error) {
+	cmdline, err := p.GetCmdLine()
 	if err != nil {
 		return ProcStatic{}, err
 	}
-	stat, err := pi.GetStat()
+	stat, err := p.GetStat()
 	if err != nil {
 		return ProcStatic{}, err
 	}
@@ -182,13 +231,12 @@ func (pi *procIterator) GetStatic() (ProcStatic, error) {
 	}, nil
 }
 
-// GetMetrics() implements Proc.
-func (pi *procIterator) GetMetrics() (ProcMetrics, error) {
-	io, err := pi.GetIo()
+func (p proc) GetMetrics() (ProcMetrics, error) {
+	io, err := p.GetIo()
 	if err != nil {
 		return ProcMetrics{}, err
 	}
-	stat, err := pi.GetStat()
+	stat, err := p.GetStat()
 	if err != nil {
 		return ProcMetrics{}, err
 	}
@@ -199,4 +247,29 @@ func (pi *procIterator) GetMetrics() (ProcMetrics, error) {
 		ResidentBytes: uint64(stat.ResidentMemory()),
 		VirtualBytes:  uint64(stat.VirtualMemory()),
 	}, nil
+}
+
+func AllProcs() ProcIter {
+	procs, err := procfs.AllProcs()
+	if err != nil {
+		err = fmt.Errorf("Error reading procs: %v", err)
+	}
+	return &procIterator{procs: procfsprocs(procs), err: err, idx: -1}
+}
+
+func (pi *procIterator) Next() bool {
+	pi.idx++
+	if pi.idx < pi.procs.length() {
+		pi.Proc = pi.procs.get(pi.idx)
+	} else {
+		pi.Proc = nil
+	}
+	return pi.idx < pi.procs.length()
+}
+
+func (pi *procIterator) Close() error {
+	pi.Next()
+	pi.procs = nil
+	pi.Proc = nil
+	return pi.err
 }

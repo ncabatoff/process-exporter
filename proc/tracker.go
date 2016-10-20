@@ -63,10 +63,14 @@ func (t *Tracker) Track(groupName string, idinfo ProcIdInfo) {
 	t.Tracked[idinfo.ProcId] = &TrackedProc{GroupName: groupName, info: info}
 }
 
+func (t *Tracker) Ignore(id ProcId) {
+	t.Tracked[id] = nil
+}
+
 // Scan procs and update metrics for those which are tracked.  Processes that have gone
 // away get removed from the Tracked map.  New processes are returned.
 
-func (t *Tracker) Update(procs Procs) ([]ProcIdInfo, error) {
+func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, error) {
 	now := time.Now()
 	var newProcs []ProcIdInfo
 	for procs.Next() {

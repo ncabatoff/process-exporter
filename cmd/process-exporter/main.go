@@ -18,8 +18,14 @@ func printManual() {
 	fmt.Print(`process-exporter -procnames name1,...,nameN [options]
 
 Every process not in the procnames list is ignored.  Otherwise, all processes
-found are reported on as a group based on their shared name.  Here 'name' refers
-to the value found in the second field of /proc/<pid>/stat.
+found are reported on as a group based on the process name they share. 
+Here 'process name' refers to the value found in the second field of
+/proc/<pid>/stat, which is truncated at 15 chars.
+
+The -children option makes it so that any process that otherwise isn't part of
+its own group becomes part of the first group found (if any) when walking the
+process tree upwards.  In other words, subprocesses resource usage gets
+accounted for as part of their parents.  This is the default behaviour.
 
 The -namemapping option allows assigning a group name based on a combination of
 the process name and command line.  For example, using 
@@ -28,12 +34,15 @@ the process name and command line.  For example, using
 
 will make it so that each different python2 and java -jar invocation will be
 tracked with distinct metrics.  Processes whose remapped name is absent from
-the procnames list will be ignored.
+the procnames list will be ignored.  Here's an example that I run on my home
+machine (Ubuntu Xenian):
 
-The -children option makes it so that any process that otherwise isn't part of
-its own group becomes part of the first group found (if any) when walking the
-process tree upwards.  In other words, subprocesses resource usage gets
-accounted for as part of their parents.
+  process-exporter -namemapping "upstart,(--user)" \
+    -procnames chromium-browse,bash,prometheus,prombench,gvim,upstart:-user
+
+Since it appears that upstart --user is the parent process of my X11 session,
+this will make all apps I start count against it, unless they're one of the
+others named explicitly with -procnames.
 
 ` + "\n")
 

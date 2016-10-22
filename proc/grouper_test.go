@@ -1,6 +1,7 @@
 package proc
 
 import (
+	"github.com/kylelemons/godebug/pretty"
 	. "gopkg.in/check.v1"
 )
 
@@ -10,7 +11,8 @@ func (i idnamer) Name(nacl NameAndCmdline) string {
 	return nacl.Name
 }
 
-// Test core grouper functionality, i.e things not related to namers or parents.
+// Test core group() functionality, i.e things not related to namers or parents
+// or processes that have exited.
 func (s MySuite) TestGrouperBasic(c *C) {
 	newProc := func(pid int, name string, m ProcMetrics) ProcIdInfo {
 		pis := newProcIdStatic(pid, 0, 0, name, nil)
@@ -28,8 +30,8 @@ func (s MySuite) TestGrouperBasic(c *C) {
 	err := gr.Update(procInfoIter(p1, p2, p3))
 	c.Assert(err, IsNil)
 
-	got1 := gr.Groups()
-	want1 := map[string]Groupcounts{
+	got1 := gr.groups()
+	want1 := GroupCountMap{
 		"g1": Groupcounts{Counts{0, 0, 0}, 1, 4, 5},
 		"g2": Groupcounts{Counts{0, 0, 0}, 1, 5, 6},
 	}
@@ -42,8 +44,8 @@ func (s MySuite) TestGrouperBasic(c *C) {
 	err = gr.Update(procInfoIter(p1, p2, p3))
 	c.Assert(err, IsNil)
 
-	got2 := gr.Groups()
-	want2 := map[string]Groupcounts{
+	got2 := gr.groups()
+	want2 := GroupCountMap{
 		"g1": Groupcounts{Counts{1, 1, 1}, 1, 5, 6},
 		"g2": Groupcounts{Counts{2, 2, 2}, 1, 7, 8},
 	}
@@ -59,12 +61,12 @@ func (s MySuite) TestGrouperBasic(c *C) {
 	err = gr.Update(procInfoIter(p1, p2, p3, p4))
 	c.Assert(err, IsNil)
 
-	got3 := gr.Groups()
-	want3 := map[string]Groupcounts{
-		"g1": Groupcounts{Counts{1, 1, 1}, 1, 5, 6},
-		"g2": Groupcounts{Counts{3, 3, 3}, 2, 9, 10},
+	got3 := gr.groups()
+	want3 := GroupCountMap{
+		"g1": Groupcounts{Counts{0, 0, 0}, 1, 5, 6},
+		"g2": Groupcounts{Counts{1, 1, 1}, 2, 9, 10},
 	}
-	c.Check(got3, DeepEquals, want3)
+	c.Check(got3, DeepEquals, want3, Commentf("diff %s", pretty.Compare(got3, want3)))
 
 	p4.ProcMetrics = ProcMetrics{2, 2, 2, 2, 2}
 	p2.ProcMetrics = ProcMetrics{6, 7, 8, 8, 9}
@@ -72,19 +74,18 @@ func (s MySuite) TestGrouperBasic(c *C) {
 	err = gr.Update(procInfoIter(p1, p2, p3, p4))
 	c.Assert(err, IsNil)
 
-	got4 := gr.Groups()
-	want4 := map[string]Groupcounts{
-		"g1": Groupcounts{Counts{1, 1, 1}, 1, 5, 6},
-		"g2": Groupcounts{Counts{5, 5, 5}, 2, 10, 11},
+	got4 := gr.groups()
+	want4 := GroupCountMap{
+		"g1": Groupcounts{Counts{0, 0, 0}, 1, 5, 6},
+		"g2": Groupcounts{Counts{2, 2, 2}, 2, 10, 11},
 	}
-	c.Check(got4, DeepEquals, want4)
+	c.Check(got4, DeepEquals, want4, Commentf("diff %s", pretty.Compare(got4, want4)))
 
 }
 
-// Test that if a proc is tracked, we track its descendants,
-// and if not as before it gets ignored.  We won't bother
-// testing metric accumulation since that should be covered
-// by TestGrouperBasic.
+// Test that if a proc is tracked, we track its descendants, and if not as
+// before it gets ignored.  We won't bother testing metric accumulation since
+// that should be covered by TestGrouperBasic.
 func (s MySuite) TestGrouperParents(c *C) {
 	newProc := func(pid, ppid int, name string) ProcIdInfo {
 		pis := newProcIdStatic(pid, ppid, 0, name, nil)
@@ -102,8 +103,8 @@ func (s MySuite) TestGrouperParents(c *C) {
 	err := gr.Update(procInfoIter(p1, p2, p3))
 	c.Assert(err, IsNil)
 
-	got1 := gr.Groups()
-	want1 := map[string]Groupcounts{
+	got1 := gr.groups()
+	want1 := GroupCountMap{
 		"g1": Groupcounts{Counts{}, 1, 0, 0},
 		"g2": Groupcounts{Counts{}, 1, 0, 0},
 	}
@@ -119,8 +120,8 @@ func (s MySuite) TestGrouperParents(c *C) {
 	err = gr.Update(procInfoIter(p1, p2, p3, p4, p5, p6))
 	c.Assert(err, IsNil)
 
-	got2 := gr.Groups()
-	want2 := map[string]Groupcounts{
+	got2 := gr.groups()
+	want2 := GroupCountMap{
 		"g1": Groupcounts{Counts{}, 2, 0, 0},
 		"g2": Groupcounts{Counts{}, 2, 0, 0},
 	}
@@ -135,10 +136,119 @@ func (s MySuite) TestGrouperParents(c *C) {
 	err = gr.Update(procInfoIter(p1, p2, p3, p5, p6, p7, p8, p9))
 	c.Assert(err, IsNil)
 
-	got3 := gr.Groups()
-	want3 := map[string]Groupcounts{
+	got3 := gr.groups()
+	want3 := GroupCountMap{
 		"g1": Groupcounts{Counts{}, 1, 0, 0},
 		"g2": Groupcounts{Counts{}, 5, 0, 0},
 	}
 	c.Check(got3, DeepEquals, want3)
+}
+
+// Test that Groups() reports on new CPU/IO activity, even if some processes in the
+// group have gone away.
+func (s MySuite) TestGrouperGroup(c *C) {
+	newProc := func(pid int, name string, m ProcMetrics) ProcIdInfo {
+		pis := newProcIdStatic(pid, 0, 0, name, nil)
+		return ProcIdInfo{
+			ProcId:      pis.ProcId,
+			ProcStatic:  pis.ProcStatic,
+			ProcMetrics: m,
+		}
+	}
+	gr := NewGrouper([]string{"g1"}, false, idnamer{})
+
+	// First call should return zero CPU/IO.
+	p1 := newProc(1, "g1", ProcMetrics{1, 2, 3, 4, 5})
+	err := gr.Update(procInfoIter(p1))
+	c.Assert(err, IsNil)
+	got1 := gr.Groups()
+	want1 := GroupCountMap{
+		"g1": Groupcounts{Counts{0, 0, 0}, 1, 4, 5},
+	}
+	c.Check(got1, DeepEquals, want1)
+
+	// Second call should return the delta CPU/IO from first observance,
+	// as well as latest memory/proccount.
+	p1.ProcMetrics = ProcMetrics{2, 3, 4, 5, 6}
+	err = gr.Update(procInfoIter(p1))
+	c.Assert(err, IsNil)
+	got2 := gr.Groups()
+	want2 := GroupCountMap{
+		"g1": Groupcounts{Counts{1, 1, 1}, 1, 5, 6},
+	}
+	c.Check(got2, DeepEquals, want2)
+
+	// Third call: process hasn't changed, nor should our group stats.
+	err = gr.Update(procInfoIter(p1))
+	c.Assert(err, IsNil)
+	got3 := gr.Groups()
+	want3 := GroupCountMap{
+		"g1": Groupcounts{Counts{1, 1, 1}, 1, 5, 6},
+	}
+	c.Check(got3, DeepEquals, want3, Commentf("diff %s", pretty.Compare(got3, want3)))
+}
+
+// Test that Groups() reports on new CPU/IO activity, even if some processes in the
+// group have gone away.
+func (s MySuite) TestGrouperNonDecreasing(c *C) {
+	newProc := func(pid int, name string, m ProcMetrics) ProcIdInfo {
+		pis := newProcIdStatic(pid, 0, 0, name, nil)
+		return ProcIdInfo{
+			ProcId:      pis.ProcId,
+			ProcStatic:  pis.ProcStatic,
+			ProcMetrics: m,
+		}
+	}
+	gr := NewGrouper([]string{"g1", "g2"}, false, idnamer{})
+	p1 := newProc(1, "g1", ProcMetrics{1, 2, 3, 4, 5})
+	p2 := newProc(2, "g2", ProcMetrics{2, 3, 4, 5, 6})
+
+	err := gr.Update(procInfoIter(p1, p2))
+	c.Assert(err, IsNil)
+
+	got1 := gr.Groups()
+	want1 := GroupCountMap{
+		"g1": Groupcounts{Counts{0, 0, 0}, 1, 4, 5},
+		"g2": Groupcounts{Counts{0, 0, 0}, 1, 5, 6},
+	}
+	c.Check(got1, DeepEquals, want1)
+
+	// Now add a new proc p3 to g2, and increment p1/p2's metrics.
+	p1.ProcMetrics = ProcMetrics{2, 3, 4, 5, 6}
+	p2.ProcMetrics = ProcMetrics{4, 5, 6, 7, 8}
+	p3 := newProc(3, "g2", ProcMetrics{1, 1, 1, 1, 1})
+	err = gr.Update(procInfoIter(p1, p2, p3))
+	c.Assert(err, IsNil)
+
+	got2 := gr.Groups()
+	want2 := GroupCountMap{
+		"g1": Groupcounts{Counts{1, 1, 1}, 1, 5, 6},
+		"g2": Groupcounts{Counts{2, 2, 2}, 2, 8, 9},
+	}
+	c.Check(got2, DeepEquals, want2)
+
+	// Now update p3's metrics and kill p2.
+	p3.ProcMetrics = ProcMetrics{2, 3, 4, 5, 6}
+	err = gr.Update(procInfoIter(p1, p3))
+	c.Assert(err, IsNil)
+
+	got3 := gr.Groups()
+	want3 := GroupCountMap{
+		"g1": Groupcounts{Counts{1, 1, 1}, 1, 5, 6},
+		"g2": Groupcounts{Counts{3, 4, 5}, 1, 5, 6},
+	}
+	c.Check(got3, DeepEquals, want3, Commentf("diff %s", pretty.Compare(got3, want3)))
+
+	// Now update p3's metrics and kill p1.
+	p3.ProcMetrics = ProcMetrics{4, 4, 4, 2, 1}
+	err = gr.Update(procInfoIter(p3))
+	c.Assert(err, IsNil)
+
+	got4 := gr.Groups()
+	want4 := GroupCountMap{
+		"g1": Groupcounts{Counts{1, 1, 1}, 0, 0, 0},
+		"g2": Groupcounts{Counts{5, 5, 5}, 1, 2, 1},
+	}
+	c.Check(got4, DeepEquals, want4, Commentf("diff %s\n%s", pretty.Compare(got4, want4), pretty.Sprint(gr)))
+
 }

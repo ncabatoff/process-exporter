@@ -35,8 +35,10 @@ type (
 		lastUpdate time.Time
 		// info is the most recently obtained info for this proc
 		info ProcInfo
-		// accum is the total CPU and IO accrued
+		// accum is the total CPU and IO accrued since we started tracking this proc
 		accum Counts
+		// lastaccum is the CPU and IO accrued in the last Update()
+		lastaccum Counts
 		// GroupName is an optional tag for this proc.
 		GroupName string
 	}
@@ -50,8 +52,8 @@ func (tp *TrackedProc) GetCmdLine() []string {
 	return tp.info.Cmdline
 }
 
-func (tp *TrackedProc) GetStats() (Counts, Memory) {
-	return tp.accum, Memory{Resident: tp.info.ResidentBytes, Virtual: tp.info.VirtualBytes}
+func (tp *TrackedProc) GetStats() (aggregate, latest Counts, mem Memory) {
+	return tp.accum, tp.lastaccum, Memory{Resident: tp.info.ResidentBytes, Virtual: tp.info.VirtualBytes}
 }
 
 func NewTracker() *Tracker {
@@ -107,6 +109,7 @@ func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, error) {
 			last.info.ProcMetrics = metrics
 			last.lastUpdate = now
 			last.accum = newaccum
+			last.lastaccum = lastaccum
 		} else {
 			static, err := procs.GetStatic()
 			if err != nil {

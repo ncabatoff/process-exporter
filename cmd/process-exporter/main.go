@@ -46,19 +46,19 @@ var (
 		[]string{"groupname"},
 		nil)
 
-	CpusecsDesc = prometheus.NewDesc(
+	cpuSecsDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_cpu_seconds_total",
 		"Cpu usage in seconds",
 		[]string{"groupname"},
 		nil)
 
-	ReadBytesDesc = prometheus.NewDesc(
+	readBytesDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_read_bytes_total",
 		"number of bytes read by this group",
 		[]string{"groupname"},
 		nil)
 
-	WriteBytesDesc = prometheus.NewDesc(
+	writeBytesDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_write_bytes_total",
 		"number of bytes written by this group",
 		[]string{"groupname"},
@@ -215,22 +215,15 @@ func (p *NamedProcessCollector) Init() error {
 
 // Describe implements prometheus.Collector.
 func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
-	ch <- CpusecsDesc
+	ch <- cpuSecsDesc
 	ch <- numprocsDesc
-	ch <- ReadBytesDesc
-	ch <- WriteBytesDesc
+	ch <- readBytesDesc
+	ch <- writeBytesDesc
 	ch <- membytesDesc
 }
 
 // Collect implements prometheus.Collector.
 func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
-	counter := func(d *prometheus.Desc, val, prevVal float64, label string) {
-		if val-prevVal < 0 {
-			val = 0
-		}
-		ch <- prometheus.MustNewConstMetric(d, prometheus.CounterValue, val, label)
-	}
-
 	err := p.Update(proc.AllProcs())
 	if err != nil {
 		// TODO inc scrape failure
@@ -245,19 +238,11 @@ func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
 			prometheus.GaugeValue, float64(gcounts.Memresident), gname, "resident")
 		ch <- prometheus.MustNewConstMetric(membytesDesc,
 			prometheus.GaugeValue, float64(gcounts.Memvirtual), gname, "virtual")
-
-		if grpstat, ok := p.GroupStats[gname]; ok {
-			// It's convenient to treat Cpu, ReadBytes, etc as counters so we can use rate().
-			// In practice it doesn't quite work because processes can exit while their group
-			// persists, and with that pid's absence our summed value across the group will
-			// become smaller.  We'll cheat by simply pretending there was no change to the
-			// counter when that happens.
-
-			counter(CpusecsDesc, gcounts.Cpu, grpstat.Cpu, gname)
-			counter(ReadBytesDesc, float64(gcounts.ReadBytes), float64(grpstat.ReadBytes), gname)
-			counter(WriteBytesDesc, float64(gcounts.WriteBytes), float64(grpstat.WriteBytes), gname)
-		}
-
-		p.GroupStats[gname] = gcounts.Counts
+		ch <- prometheus.MustNewConstMetric(cpuSecsDesc,
+			prometheus.CounterValue, gcounts.Cpu, gname)
+		ch <- prometheus.MustNewConstMetric(readBytesDesc,
+			prometheus.CounterValue, float64(gcounts.ReadBytes), gname)
+		ch <- prometheus.MustNewConstMetric(writeBytesDesc,
+			prometheus.CounterValue, float64(gcounts.WriteBytes), gname)
 	}
 }

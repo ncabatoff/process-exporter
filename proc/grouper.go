@@ -20,6 +20,8 @@ type (
 		tracker    *Tracker
 	}
 
+	GroupCountMap map[string]Groupcounts
+
 	Groupcounts struct {
 		Counts
 		Procs       int
@@ -117,9 +119,10 @@ func (g *Grouper) Update(iter ProcIter) error {
 	return nil
 }
 
-// Groups returns the aggregate metrics for all groups tracked.
-func (g *Grouper) Groups() map[string]Groupcounts {
-	gcounts := make(map[string]Groupcounts)
+// groups returns the aggregate metrics for all groups tracked.  This reflects
+// solely what's currently running.
+func (g *Grouper) groups() GroupCountMap {
+	gcounts := make(GroupCountMap)
 
 	for _, tinfo := range g.tracker.Tracked {
 		if tinfo == nil {
@@ -127,7 +130,7 @@ func (g *Grouper) Groups() map[string]Groupcounts {
 		}
 		cur := gcounts[tinfo.GroupName]
 		cur.Procs++
-		counts, mem := tinfo.GetStats()
+		_, counts, mem := tinfo.GetStats()
 		cur.Memresident += mem.Resident
 		cur.Memvirtual += mem.Virtual
 		cur.Counts.Cpu += counts.Cpu
@@ -137,4 +140,33 @@ func (g *Grouper) Groups() map[string]Groupcounts {
 	}
 
 	return gcounts
+}
+
+// Groups returns Groupcounts with Counts that never decrease in value from one
+// call to the next.  Even if processes exit, their CPU and IO contributions up
+// to that point are included in the results.  Even if no processes remain
+// in a group it will still be included in the results.
+func (g *Grouper) Groups() GroupCountMap {
+	groups := g.groups()
+
+	// First add any accumulated counts to what was just observed,
+	// and update the accumulators.
+	for gname, group := range groups {
+		if oldcounts, ok := g.GroupStats[gname]; ok {
+			group.Counts.Cpu += oldcounts.Cpu
+			group.Counts.ReadBytes += oldcounts.ReadBytes
+			group.Counts.WriteBytes += oldcounts.WriteBytes
+		}
+		g.GroupStats[gname] = group.Counts
+		groups[gname] = group
+	}
+
+	// Now add any groups that were observed in the past but aren't running now.
+	for gname, gcounts := range g.GroupStats {
+		if _, ok := groups[gname]; !ok {
+			groups[gname] = Groupcounts{Counts: gcounts}
+		}
+	}
+
+	return groups
 }

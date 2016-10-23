@@ -20,26 +20,26 @@ func (s MySuite) TestTrackerBasic(c *C) {
 	// Test that p1 is seen as new
 	p1 := newProc(1, 1, "p1")
 	want1 := []ProcIdInfo{p1}
-	got1, err := tr.Update(procInfoIter(want1...))
+	got1, _, err := tr.Update(procInfoIter(want1...))
 	c.Assert(err, IsNil)
 	c.Check(got1, DeepEquals, want1)
 
 	// Test that p1 is no longer seen as new once tracked
 	tr.Track("g1", p1)
-	got2, err := tr.Update(procInfoIter(want1...))
+	got2, _, err := tr.Update(procInfoIter(want1...))
 	c.Assert(err, IsNil)
 	c.Check(got2, DeepEquals, []ProcIdInfo(nil))
 
 	// Test that p2 is new now, but p1 is still not
 	p2 := newProc(2, 2, "p2")
 	want2 := []ProcIdInfo{p2}
-	got3, err := tr.Update(procInfoIter(p1, p2))
+	got3, _, err := tr.Update(procInfoIter(p1, p2))
 	c.Assert(err, IsNil)
 	c.Check(got3, DeepEquals, want2)
 
 	// Test that p2 stops being new once ignored
 	tr.Ignore(p2.ProcId)
-	got4, err := tr.Update(procInfoIter(p1, p2))
+	got4, _, err := tr.Update(procInfoIter(p1, p2))
 	c.Assert(err, IsNil)
 	c.Check(got4, DeepEquals, []ProcIdInfo(nil))
 
@@ -62,19 +62,19 @@ func (s MySuite) TestTrackerCounts(c *C) {
 	// Test that p1 is seen as new
 	p1 := newProc(1, 1, "p1", ProcMetrics{1, 2, 3, 4, 5})
 	want1 := []ProcIdInfo{p1}
-	got1, err := tr.Update(procInfoIter(p1))
+	got1, _, err := tr.Update(procInfoIter(p1))
 	c.Assert(err, IsNil)
 	c.Check(got1, DeepEquals, want1)
 
 	// Test that p1 is no longer seen as new once tracked
 	tr.Track("g1", p1)
-	got2, err := tr.Update(procInfoIter(p1))
+	got2, _, err := tr.Update(procInfoIter(p1))
 	c.Assert(err, IsNil)
 	c.Check(got2, DeepEquals, []ProcIdInfo(nil))
 
 	// Now update p1's metrics
 	p1.ProcMetrics = ProcMetrics{2, 3, 4, 5, 6}
-	got3, err := tr.Update(procInfoIter(p1))
+	got3, _, err := tr.Update(procInfoIter(p1))
 	c.Assert(err, IsNil)
 	c.Check(got3, DeepEquals, []ProcIdInfo(nil))
 
@@ -84,7 +84,7 @@ func (s MySuite) TestTrackerCounts(c *C) {
 
 	// Now update p1's metrics again
 	p1.ProcMetrics = ProcMetrics{4, 6, 8, 9, 10}
-	got4, err := tr.Update(procInfoIter(p1))
+	got4, _, err := tr.Update(procInfoIter(p1))
 	c.Assert(err, IsNil)
 	c.Check(got4, DeepEquals, []ProcIdInfo(nil))
 

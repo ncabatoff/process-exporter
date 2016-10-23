@@ -27,7 +27,7 @@ func (s MySuite) TestGrouperBasic(c *C) {
 	p2 := newProc(2, "g2", ProcMetrics{2, 3, 4, 5, 6})
 	p3 := newProc(3, "g3", ProcMetrics{})
 
-	err := gr.Update(procInfoIter(p1, p2, p3))
+	_, err := gr.Update(procInfoIter(p1, p2, p3))
 	c.Assert(err, IsNil)
 
 	got1 := gr.groups()
@@ -41,7 +41,7 @@ func (s MySuite) TestGrouperBasic(c *C) {
 	p1.ProcMetrics = ProcMetrics{2, 3, 4, 5, 6}
 	p2.ProcMetrics = ProcMetrics{4, 5, 6, 7, 8}
 
-	err = gr.Update(procInfoIter(p1, p2, p3))
+	_, err = gr.Update(procInfoIter(p1, p2, p3))
 	c.Assert(err, IsNil)
 
 	got2 := gr.groups()
@@ -58,7 +58,7 @@ func (s MySuite) TestGrouperBasic(c *C) {
 	p4 := newProc(4, "g2", ProcMetrics{1, 1, 1, 1, 1})
 	p2.ProcMetrics = ProcMetrics{5, 6, 7, 8, 9}
 
-	err = gr.Update(procInfoIter(p1, p2, p3, p4))
+	_, err = gr.Update(procInfoIter(p1, p2, p3, p4))
 	c.Assert(err, IsNil)
 
 	got3 := gr.groups()
@@ -71,7 +71,7 @@ func (s MySuite) TestGrouperBasic(c *C) {
 	p4.ProcMetrics = ProcMetrics{2, 2, 2, 2, 2}
 	p2.ProcMetrics = ProcMetrics{6, 7, 8, 8, 9}
 
-	err = gr.Update(procInfoIter(p1, p2, p3, p4))
+	_, err = gr.Update(procInfoIter(p1, p2, p3, p4))
 	c.Assert(err, IsNil)
 
 	got4 := gr.groups()
@@ -100,7 +100,7 @@ func (s MySuite) TestGrouperParents(c *C) {
 	p2 := newProc(2, 0, "g2")
 	p3 := newProc(3, 0, "g3")
 
-	err := gr.Update(procInfoIter(p1, p2, p3))
+	_, err := gr.Update(procInfoIter(p1, p2, p3))
 	c.Assert(err, IsNil)
 
 	got1 := gr.groups()
@@ -117,7 +117,7 @@ func (s MySuite) TestGrouperParents(c *C) {
 	p5 := newProc(5, p2.Pid, "")
 	p6 := newProc(6, p3.Pid, "")
 
-	err = gr.Update(procInfoIter(p1, p2, p3, p4, p5, p6))
+	_, err = gr.Update(procInfoIter(p1, p2, p3, p4, p5, p6))
 	c.Assert(err, IsNil)
 
 	got2 := gr.groups()
@@ -133,7 +133,7 @@ func (s MySuite) TestGrouperParents(c *C) {
 	p8 := newProc(8, p7.Pid, "")
 	p9 := newProc(9, p8.Pid, "")
 
-	err = gr.Update(procInfoIter(p1, p2, p3, p5, p6, p7, p8, p9))
+	_, err = gr.Update(procInfoIter(p1, p2, p3, p5, p6, p7, p8, p9))
 	c.Assert(err, IsNil)
 
 	got3 := gr.groups()
@@ -159,7 +159,7 @@ func (s MySuite) TestGrouperGroup(c *C) {
 
 	// First call should return zero CPU/IO.
 	p1 := newProc(1, "g1", ProcMetrics{1, 2, 3, 4, 5})
-	err := gr.Update(procInfoIter(p1))
+	_, err := gr.Update(procInfoIter(p1))
 	c.Assert(err, IsNil)
 	got1 := gr.Groups()
 	want1 := GroupCountMap{
@@ -170,7 +170,7 @@ func (s MySuite) TestGrouperGroup(c *C) {
 	// Second call should return the delta CPU/IO from first observance,
 	// as well as latest memory/proccount.
 	p1.ProcMetrics = ProcMetrics{2, 3, 4, 5, 6}
-	err = gr.Update(procInfoIter(p1))
+	_, err = gr.Update(procInfoIter(p1))
 	c.Assert(err, IsNil)
 	got2 := gr.Groups()
 	want2 := GroupCountMap{
@@ -179,7 +179,7 @@ func (s MySuite) TestGrouperGroup(c *C) {
 	c.Check(got2, DeepEquals, want2)
 
 	// Third call: process hasn't changed, nor should our group stats.
-	err = gr.Update(procInfoIter(p1))
+	_, err = gr.Update(procInfoIter(p1))
 	c.Assert(err, IsNil)
 	got3 := gr.Groups()
 	want3 := GroupCountMap{
@@ -203,7 +203,7 @@ func (s MySuite) TestGrouperNonDecreasing(c *C) {
 	p1 := newProc(1, "g1", ProcMetrics{1, 2, 3, 4, 5})
 	p2 := newProc(2, "g2", ProcMetrics{2, 3, 4, 5, 6})
 
-	err := gr.Update(procInfoIter(p1, p2))
+	_, err := gr.Update(procInfoIter(p1, p2))
 	c.Assert(err, IsNil)
 
 	got1 := gr.Groups()
@@ -217,7 +217,7 @@ func (s MySuite) TestGrouperNonDecreasing(c *C) {
 	p1.ProcMetrics = ProcMetrics{2, 3, 4, 5, 6}
 	p2.ProcMetrics = ProcMetrics{4, 5, 6, 7, 8}
 	p3 := newProc(3, "g2", ProcMetrics{1, 1, 1, 1, 1})
-	err = gr.Update(procInfoIter(p1, p2, p3))
+	_, err = gr.Update(procInfoIter(p1, p2, p3))
 	c.Assert(err, IsNil)
 
 	got2 := gr.Groups()
@@ -229,7 +229,7 @@ func (s MySuite) TestGrouperNonDecreasing(c *C) {
 
 	// Now update p3's metrics and kill p2.
 	p3.ProcMetrics = ProcMetrics{2, 3, 4, 5, 6}
-	err = gr.Update(procInfoIter(p1, p3))
+	_, err = gr.Update(procInfoIter(p1, p3))
 	c.Assert(err, IsNil)
 
 	got3 := gr.Groups()
@@ -241,7 +241,7 @@ func (s MySuite) TestGrouperNonDecreasing(c *C) {
 
 	// Now update p3's metrics and kill p1.
 	p3.ProcMetrics = ProcMetrics{4, 4, 4, 2, 1}
-	err = gr.Update(procInfoIter(p3))
+	_, err = gr.Update(procInfoIter(p3))
 	c.Assert(err, IsNil)
 
 	got4 := gr.Groups()

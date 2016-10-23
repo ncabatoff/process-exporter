@@ -22,9 +22,28 @@ time.)  It has been translated into fractional seconds of CPU consumed during
 the polling interval.
 
 Bytes read and written come from /proc/[pid]/io in recent enough kernels.
-These correspond to the fields read_bytes and write_bytes respectively.
+These correspond to the fields `read_bytes` and `write_bytes` respectively.
 
 An example Grafana dashboard to view the metrics is available at https://grafana.net/dashboards/249
+
+## Docker
+
+A docker image can be created with
+
+```
+make docker
+```
+
+Then run the docker, e.g.
+
+```
+docker run --privileged --name pexporter -d -v /proc:/host/proc -p 127.0.0.1:9256:9256 process-exporter:master -procfs /host/proc -procnames chromium-browse,bash,prometheus,prombench,gvim,upstart:-user -namemapping "upstart,(-user)"
+```
+
+This will expose metrics on http://localhost:9256/metrics.  Leave off the
+`127.0.0.1:` to publish on all interfaces.  Leave off the --priviliged and
+add the --user docker run argument if you only need to monitor processes
+belonging to a single user.
 
 ## History
 

@@ -84,11 +84,12 @@ func (g *Grouper) checkAncestry(idinfo ProcIdInfo, newprocs map[ProcId]ProcIdInf
 }
 
 // Update tracks any new procs that should be according to policy, and updates
-// the metrics for already tracked procs.
-func (g *Grouper) Update(iter ProcIter) error {
-	newProcs, err := g.tracker.Update(iter)
+// the metrics for already tracked procs.  Permission errors are returned as a
+// count, and will not affect the error return value.
+func (g *Grouper) Update(iter ProcIter) (int, error) {
+	newProcs, permErrs, err := g.tracker.Update(iter)
 	if err != nil {
-		return err
+		return permErrs, err
 	}
 
 	// Step 1: track any new proc that should be tracked based on its name and cmdline.
@@ -105,7 +106,7 @@ func (g *Grouper) Update(iter ProcIter) error {
 
 	// Step 2: track any untracked new proc that should be tracked because its parent is tracked.
 	if !g.trackChildren {
-		return nil
+		return permErrs, nil
 	}
 
 	for _, idinfo := range untracked {
@@ -116,7 +117,7 @@ func (g *Grouper) Update(iter ProcIter) error {
 
 		g.checkAncestry(idinfo, untracked)
 	}
-	return nil
+	return permErrs, nil
 }
 
 // groups returns the aggregate metrics for all groups tracked.  This reflects

@@ -2,6 +2,7 @@ package proc
 
 import (
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -70,11 +71,13 @@ func (t *Tracker) Ignore(id ProcId) {
 }
 
 // Scan procs and update metrics for those which are tracked.  Processes that have gone
-// away get removed from the Tracked map.  New processes are returned.
-
-func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, error) {
+// away get removed from the Tracked map.  New processes are returned, along with the count
+// of permission errors.
+func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, int, error) {
 	now := time.Now()
 	var newProcs []ProcIdInfo
+	var permissionErrors int
+
 	for procs.Next() {
 		procId, err := procs.GetProcId()
 		if err != nil {
@@ -88,8 +91,12 @@ func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, error) {
 			continue
 		}
 
+		// TODO if just the io file is unreadable, should we still return the other metrics?
 		metrics, err := procs.GetMetrics()
 		if err != nil {
+			if os.IsPermission(err) {
+				permissionErrors++
+			}
 			continue
 		}
 
@@ -129,7 +136,7 @@ func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, error) {
 	}
 	err := procs.Close()
 	if err != nil {
-		return nil, fmt.Errorf("Error reading procs: %v", err)
+		return nil, permissionErrors, fmt.Errorf("Error reading procs: %v", err)
 	}
 
 	// Rather than allocating a new map each time to detect procs that have
@@ -148,5 +155,5 @@ func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, error) {
 		}
 	}
 
-	return newProcs, nil
+	return newProcs, permissionErrors, nil
 }

@@ -78,6 +78,18 @@ var (
 		"number of bytes of memory in use",
 		[]string{"groupname", "memtype"},
 		nil)
+
+	scrapeErrorsDesc = prometheus.NewDesc(
+		"namedprocess_scrape_errors",
+		"non-permission scrape errors",
+		nil,
+		nil)
+
+	scrapePermissionErrorsDesc = prometheus.NewDesc(
+		"namedprocess_scrape_permission_errors",
+		"permission scrape errors (unreadable files under /proc)",
+		nil,
+		nil)
 )
 
 type (
@@ -124,6 +136,8 @@ func main() {
 			"Don't bind, instead just print the metrics once to stdout and exit")
 		procNames = flag.String("procnames", "",
 			"comma-seperated list of process names to monitor")
+		procfsPath = flag.String("procfs", "/proc",
+			"path to read proc data from")
 		nameMapping = flag.String("namemapping", "",
 			"comma-seperated list, alternating process name and capturing regex to apply to cmdline")
 		children = flag.Bool("children", true,
@@ -154,15 +168,14 @@ func main() {
 	for name := range wantNames {
 		names = append(names, name)
 	}
-	log.Println(names)
+	log.Printf("Reading metrics from %s for procnames: %v", *procfsPath, names)
 
 	if err != nil {
 		log.Fatalf("Error parsing -namemapping argument '%s': %v", *nameMapping, err)
 	}
 
-	pc := NewProcessCollector(names, *children, namemapper)
-
-	if err := pc.Init(); err != nil {
+	pc, err := NewProcessCollector(*procfsPath, names, *children, namemapper)
+	if err != nil {
 		log.Fatalf("Error initializing: %v", err)
 	}
 
@@ -172,9 +185,9 @@ func main() {
 		// We throw away the first result because that first collection primes the pump, and
 		// otherwise we won't see our counter metrics.  This is specific to the implementation
 		// of NamedProcessCollector.Collect().
-		fs := fakescraper.NewFakeScraper()
-		fs.Scrape()
-		fmt.Print(fs.Scrape())
+		fscraper := fakescraper.NewFakeScraper()
+		fscraper.Scrape()
+		fmt.Print(fscraper.Scrape())
 		return
 	}
 
@@ -197,6 +210,9 @@ func main() {
 type (
 	NamedProcessCollector struct {
 		*proc.Grouper
+		fs                     *proc.FS
+		scrapeErrors           int
+		scrapePermissionErrors int
 	}
 )
 
@@ -214,12 +230,27 @@ func (nm nameMapperRegex) Name(nacl proc.NameAndCmdline) string {
 	return nacl.Name
 }
 
-func NewProcessCollector(procnames []string, children bool, n proc.Namer) *NamedProcessCollector {
-	return &NamedProcessCollector{proc.NewGrouper(procnames, children, n)}
-}
+func NewProcessCollector(
+	procfsPath string,
+	procnames []string,
+	children bool,
+	n proc.Namer,
+) (*NamedProcessCollector, error) {
+	fs, err := proc.NewFS(procfsPath)
+	if err != nil {
+		return nil, err
+	}
+	p := &NamedProcessCollector{
+		Grouper: proc.NewGrouper(procnames, children, n),
+		fs:      fs,
+	}
 
-func (p *NamedProcessCollector) Init() error {
-	return p.Update(proc.AllProcs())
+	_, err = p.Update(p.fs.AllProcs())
+	if err != nil {
+		return nil, err
+	}
+
+	return p, nil
 }
 
 // Describe implements prometheus.Collector.
@@ -229,29 +260,35 @@ func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- readBytesDesc
 	ch <- writeBytesDesc
 	ch <- membytesDesc
+	ch <- scrapeErrorsDesc
+	ch <- scrapePermissionErrorsDesc
 }
 
 // Collect implements prometheus.Collector.
 func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
-	err := p.Update(proc.AllProcs())
+	permErrs, err := p.Update(p.fs.AllProcs())
+	p.scrapePermissionErrors += permErrs
 	if err != nil {
-		// TODO inc scrape failure
+		p.scrapeErrors++
 		log.Printf("error reading procs: %v", err)
-		return
+	} else {
+		for gname, gcounts := range p.Groups() {
+			ch <- prometheus.MustNewConstMetric(numprocsDesc,
+				prometheus.GaugeValue, float64(gcounts.Procs), gname)
+			ch <- prometheus.MustNewConstMetric(membytesDesc,
+				prometheus.GaugeValue, float64(gcounts.Memresident), gname, "resident")
+			ch <- prometheus.MustNewConstMetric(membytesDesc,
+				prometheus.GaugeValue, float64(gcounts.Memvirtual), gname, "virtual")
+			ch <- prometheus.MustNewConstMetric(cpuSecsDesc,
+				prometheus.CounterValue, gcounts.Cpu, gname)
+			ch <- prometheus.MustNewConstMetric(readBytesDesc,
+				prometheus.CounterValue, float64(gcounts.ReadBytes), gname)
+			ch <- prometheus.MustNewConstMetric(writeBytesDesc,
+				prometheus.CounterValue, float64(gcounts.WriteBytes), gname)
+		}
 	}
-
-	for gname, gcounts := range p.Groups() {
-		ch <- prometheus.MustNewConstMetric(numprocsDesc,
-			prometheus.GaugeValue, float64(gcounts.Procs), gname)
-		ch <- prometheus.MustNewConstMetric(membytesDesc,
-			prometheus.GaugeValue, float64(gcounts.Memresident), gname, "resident")
-		ch <- prometheus.MustNewConstMetric(membytesDesc,
-			prometheus.GaugeValue, float64(gcounts.Memvirtual), gname, "virtual")
-		ch <- prometheus.MustNewConstMetric(cpuSecsDesc,
-			prometheus.CounterValue, gcounts.Cpu, gname)
-		ch <- prometheus.MustNewConstMetric(readBytesDesc,
-			prometheus.CounterValue, float64(gcounts.ReadBytes), gname)
-		ch <- prometheus.MustNewConstMetric(writeBytesDesc,
-			prometheus.CounterValue, float64(gcounts.WriteBytes), gname)
-	}
+	ch <- prometheus.MustNewConstMetric(scrapeErrorsDesc,
+		prometheus.CounterValue, float64(p.scrapeErrors))
+	ch <- prometheus.MustNewConstMetric(scrapePermissionErrorsDesc,
+		prometheus.CounterValue, float64(p.scrapePermissionErrors))
 }

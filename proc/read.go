@@ -249,8 +249,22 @@ func (p proc) GetMetrics() (ProcMetrics, error) {
 	}, nil
 }
 
-func AllProcs() ProcIter {
-	procs, err := procfs.AllProcs()
+type FS struct {
+	procfs.FS
+}
+
+// NewFS returns a new FS mounted under the given mountPoint. It will error
+// if the mount point can't be read.
+func NewFS(mountPoint string) (*FS, error) {
+	fs, err := procfs.NewFS(mountPoint)
+	if err != nil {
+		return nil, err
+	}
+	return &FS{fs}, nil
+}
+
+func (fs *FS) AllProcs() ProcIter {
+	procs, err := fs.FS.AllProcs()
 	if err != nil {
 		err = fmt.Errorf("Error reading procs: %v", err)
 	}

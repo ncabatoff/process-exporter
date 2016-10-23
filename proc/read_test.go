@@ -6,9 +6,15 @@ import (
 	"os/exec"
 )
 
+var fs *FS
+
+func init() {
+	fs, _ = NewFS("/proc")
+}
+
 // Basic test of proc reading: does AllProcs return at least two procs, one of which is us.
 func (s MySuite) TestAllProcs(c *C) {
-	procs := AllProcs()
+	procs := fs.AllProcs()
 	count := 0
 	for procs.Next() {
 		count++
@@ -32,7 +38,7 @@ func (s MySuite) TestAllProcs(c *C) {
 func (s MySuite) TestAllProcsSpawn(c *C) {
 	childprocs := func() []ProcIdStatic {
 		found := []ProcIdStatic{}
-		procs := AllProcs()
+		procs := fs.AllProcs()
 		mypid := os.Getpid()
 		for procs.Next() {
 			procid, err := procs.GetProcId()

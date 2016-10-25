@@ -5,10 +5,10 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-type idnamer struct{}
+type nevernamer struct{}
 
-func (i idnamer) Name(nacl NameAndCmdline) string {
-	return nacl.Name
+func (i nevernamer) Name(nacl NameAndCmdline) string {
+	return ""
 }
 
 // Test core group() functionality, i.e things not related to namers or parents
@@ -22,7 +22,7 @@ func (s MySuite) TestGrouperBasic(c *C) {
 			ProcMetrics: m,
 		}
 	}
-	gr := NewGrouper([]string{"g1", "g2"}, false, idnamer{})
+	gr := NewGrouper([]string{"g1", "g2"}, false, nevernamer{})
 	p1 := newProc(1, "g1", ProcMetrics{1, 2, 3, 4, 5})
 	p2 := newProc(2, "g2", ProcMetrics{2, 3, 4, 5, 6})
 	p3 := newProc(3, "g3", ProcMetrics{})
@@ -95,7 +95,7 @@ func (s MySuite) TestGrouperParents(c *C) {
 			ProcMetrics: ProcMetrics{},
 		}
 	}
-	gr := NewGrouper([]string{"g1", "g2"}, true, idnamer{})
+	gr := NewGrouper([]string{"g1", "g2"}, true, nevernamer{})
 	p1 := newProc(1, 0, "g1")
 	p2 := newProc(2, 0, "g2")
 	p3 := newProc(3, 0, "g3")
@@ -108,7 +108,7 @@ func (s MySuite) TestGrouperParents(c *C) {
 		"g1": Groupcounts{Counts{}, 1, 0, 0},
 		"g2": Groupcounts{Counts{}, 1, 0, 0},
 	}
-	c.Check(got1, DeepEquals, want1)
+	c.Check(got1, DeepEquals, want1, Commentf("diff %s", pretty.Compare(got1, want1)))
 
 	// Now we'll give each of the procs a child and test that the count of procs
 	// in each group is incremented.
@@ -125,7 +125,7 @@ func (s MySuite) TestGrouperParents(c *C) {
 		"g1": Groupcounts{Counts{}, 2, 0, 0},
 		"g2": Groupcounts{Counts{}, 2, 0, 0},
 	}
-	c.Check(got2, DeepEquals, want2)
+	c.Check(got2, DeepEquals, want2, Commentf("diff %s", pretty.Compare(got2, want2)))
 
 	// Now we'll let p4 die, and give p5 a child and grandchild and great-grandchild.
 
@@ -141,7 +141,7 @@ func (s MySuite) TestGrouperParents(c *C) {
 		"g1": Groupcounts{Counts{}, 1, 0, 0},
 		"g2": Groupcounts{Counts{}, 5, 0, 0},
 	}
-	c.Check(got3, DeepEquals, want3)
+	c.Check(got3, DeepEquals, want3, Commentf("diff %s", pretty.Compare(got3, want3)))
 }
 
 // Test that Groups() reports on new CPU/IO activity, even if some processes in the
@@ -155,7 +155,7 @@ func (s MySuite) TestGrouperGroup(c *C) {
 			ProcMetrics: m,
 		}
 	}
-	gr := NewGrouper([]string{"g1"}, false, idnamer{})
+	gr := NewGrouper([]string{"g1"}, false, nevernamer{})
 
 	// First call should return zero CPU/IO.
 	p1 := newProc(1, "g1", ProcMetrics{1, 2, 3, 4, 5})
@@ -199,7 +199,7 @@ func (s MySuite) TestGrouperNonDecreasing(c *C) {
 			ProcMetrics: m,
 		}
 	}
-	gr := NewGrouper([]string{"g1", "g2"}, false, idnamer{})
+	gr := NewGrouper([]string{"g1", "g2"}, false, nevernamer{})
 	p1 := newProc(1, "g1", ProcMetrics{1, 2, 3, 4, 5})
 	p2 := newProc(2, "g2", ProcMetrics{2, 3, 4, 5, 6})
 

@@ -96,7 +96,14 @@ func (g *Grouper) Update(iter ProcIter) (int, error) {
 	untracked := make(map[ProcId]ProcIdInfo)
 	for _, idinfo := range newProcs {
 		gname := g.Namer.Name(NameAndCmdline{idinfo.Name, idinfo.Cmdline})
-		if _, ok := g.wantProcNames[gname]; !ok {
+		wanted := false
+		if gname != "" {
+			wanted = true
+		} else {
+			gname = idinfo.Name
+			_, wanted = g.wantProcNames[gname]
+		}
+		if !wanted {
 			untracked[idinfo.ProcId] = idinfo
 			continue
 		}

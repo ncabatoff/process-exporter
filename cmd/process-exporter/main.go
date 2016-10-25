@@ -159,17 +159,13 @@ func main() {
 		}
 	}
 
-	namemapper, err := parseNameMapper(*nameMapping)
-	for name := range namemapper.mapping {
-		wantNames[name] = struct{}{}
-	}
-
 	names := make([]string, 0, len(wantNames))
 	for name := range wantNames {
 		names = append(names, name)
 	}
 	log.Printf("Reading metrics from %s for procnames: %v", *procfsPath, names)
 
+	namemapper, err := parseNameMapper(*nameMapping)
 	if err != nil {
 		log.Fatalf("Error parsing -namemapping argument '%s': %v", *nameMapping, err)
 	}
@@ -227,7 +223,7 @@ func (nm nameMapperRegex) Name(nacl proc.NameAndCmdline) string {
 			}
 		}
 	}
-	return nacl.Name
+	return ""
 }
 
 func NewProcessCollector(

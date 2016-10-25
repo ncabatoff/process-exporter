@@ -93,13 +93,18 @@ var (
 )
 
 type (
+	prefixRegex struct {
+		prefix string
+		regex  *regexp.Regexp
+	}
+
 	nameMapperRegex struct {
-		mapping map[string]*regexp.Regexp
+		mapping map[string]prefixRegex
 	}
 )
 
 func parseNameMapper(s string) (*nameMapperRegex, error) {
-	mapper := make(map[string]*regexp.Regexp)
+	mapper := make(map[string]prefixRegex)
 	if s == "" {
 		return &nameMapperRegex{mapper}, nil
 	}
@@ -115,10 +120,19 @@ func parseNameMapper(s string) (*nameMapperRegex, error) {
 		}
 		if i%2 == 1 {
 			name, regexstr := toks[i-1], tok
+			matchName := name
+			prefix := name + ":"
+
+			nametoks := strings.Split(name, ";")
+			if len(nametoks) == 2 {
+				matchName, prefix = nametoks[0], nametoks[1]
+			}
+			// TODO handle other cases
+
 			if r, err := regexp.Compile(regexstr); err != nil {
 				return nil, fmt.Errorf("error compiling regexp '%s': %v", regexstr, err)
 			} else {
-				mapper[name] = r
+				mapper[matchName] = prefixRegex{prefix: prefix, regex: r}
 			}
 		}
 	}
@@ -213,12 +227,12 @@ type (
 )
 
 func (nm nameMapperRegex) Name(nacl proc.NameAndCmdline) string {
-	if regex, ok := nm.mapping[nacl.Name]; ok {
-		matches := regex.FindStringSubmatch(strings.Join(nacl.Cmdline, " "))
+	if pregex, ok := nm.mapping[nacl.Name]; ok {
+		matches := pregex.regex.FindStringSubmatch(strings.Join(nacl.Cmdline, " "))
 		if len(matches) > 1 {
 			for _, matchstr := range matches[1:] {
 				if matchstr != "" {
-					return nacl.Name + ":" + matchstr
+					return pregex.prefix + matchstr
 				}
 			}
 		}

@@ -14,15 +14,17 @@ and the groups are named.  Run "process-exporter -man" to see a help page
 giving details.
 
 Metrics available currently include CPU usage, bytes written and read, and
-number of processes in each group.  They come with plenty of caveats, see
-either the Linux kernel documentation or man 5 proc.
-
-CPU usage comes from /proc/[pid]/stat fields utime (user time) and stime (system
-time.)  It has been translated into fractional seconds of CPU consumed during
-the polling interval.
+number of processes in each group.  
 
 Bytes read and written come from /proc/[pid]/io in recent enough kernels.
 These correspond to the fields `read_bytes` and `write_bytes` respectively.
+These IO stats come with plenty of caveats, see either the Linux kernel 
+documentation or man 5 proc.
+
+CPU usage comes from /proc/[pid]/stat fields utime (user time) and stime (system
+time.)  It has been translated into fractional seconds of CPU consumed.  Since
+it is a counter, using rate() will tell you how many fractional cores were running
+code from this process during the interval given.
 
 An example Grafana dashboard to view the metrics is available at https://grafana.net/dashboards/249
 

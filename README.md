@@ -28,6 +28,96 @@ code from this process during the interval given.
 
 An example Grafana dashboard to view the metrics is available at https://grafana.net/dashboards/249
 
+## Instrumentation cost
+
+process-exporter will consume CPU in proportion to the number of processes in
+the system and the rate at which new ones are created.  The most expensive
+parts - applying regexps and executing templates - are only applied once per
+process seen.  If you have mostly long-running processes process-exporter
+should be lightweight: each time a scrape occurs, parsing of /proc/$pid/stat
+and /proc/$pid/cmdline for every process being monitored and adding a few
+numbers.
+
+## Config
+
+To select and group the processes to monitor, either provide command-line
+arguments or use a YAML configuration file. 
+
+To avoid confusion with the cmdline YAML element, we'll refer to the
+null-delimited contents of `/proc/<pid>/cmdline` as the array `argv[]`.
+
+Each item in `process_names` gives a recipe for identifying and naming
+processes.  The optional `name` tag defines a template to use to name
+matching processes; if not specified, `name` defaults to `{{.ExeBase}}`.
+
+Template variables available:
+- `{{.ExeBase}}` contains the basename of the executable
+- `{{.ExeFull}}` contains the fully qualified path of the executable
+- `{{.Matches}}` map contains all the matches resulting from applying cmdline regexps
+
+Each item in `process_names` must contain one or more selectors (`comm`, `exe`
+or `cmdline`); if more than one selector is present, they must all match.  Each
+selector is a list of strings to match against a process's `comm`, `argv[0]`,
+or in the case of `cmdline`, a regexp to apply to the command line.  
+
+For `comm` and `exe`, the list of strings is an OR, meaning any process
+matching any of the strings will be added to the item's group.  
+
+For `cmdline`, the list of regexes is an AND, meaning they all must match.  Any
+capturing groups in a regexp must use the `?P<name>` option to assign a name to
+the capture, which is used to populate `.Matches`.
+
+A process may only belong to one group: even if multiple items would match, the
+first one listed in the file wins.
+
+Other performance tips: give an exe or comm clause in addition to any cmdline
+clause, so you avoid executing the regexp when the executable name doesn't
+match.
+
+```
+
+process_names:
+  # comm is the second field of /proc/<pid>/stat minus parens.
+  # It is the base executable name, truncated at 15 chars.  
+  # It cannot be modified by the program, unlike exe.
+  - comm:
+    - bash
+    
+  # exe is argv[0]. If no slashes, only basename of argv[0] need match.
+  # If exe contains slashes, argv[0] must match exactly.
+  - exe: 
+    - postgres
+    - /usr/local/bin/prometheus
+
+  # cmdline is a list of regexps applied to argv.
+  # Each must match, and any captures are added to the .Matches map.
+  - name: "{{.ExeFull}}:{{.Matches.Cfgfile}}"
+    exe: 
+    - /usr/local/bin/process-exporter
+    cmdline: 
+    - -config.path\\s+(?P<Cfgfile>\\S+)
+    
+
+```
+
+Here's the config I use on my home machine:
+
+```
+
+process_names:
+  - comm: 
+    - chromium-browse
+    - bash
+    - prometheus
+    - gvim
+  - exe: 
+    - /sbin/upstart
+    cmdline: 
+    - --user
+    name: upstart:-user
+
+```
+
 ## Docker
 
 A docker image can be created with
@@ -39,7 +129,7 @@ make docker
 Then run the docker, e.g.
 
 ```
-docker run --privileged --name pexporter -d -v /proc:/host/proc -p 127.0.0.1:9256:9256 process-exporter:master -procfs /host/proc -procnames chromium-browse,bash,prometheus,prombench,gvim,upstart:-user -namemapping "upstart,(-user)"
+docker run --privileged --name pexporter -d -v /proc:/host/proc -p 127.0.0.1:9256:9256 process-exporter:master -procfs /host/proc -procnames chromium-browse,bash,prometheus,gvim,upstart:-user -namemapping "upstart,(-user)"
 ```
 
 This will expose metrics on http://localhost:9256/metrics.  Leave off the

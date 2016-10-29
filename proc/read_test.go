@@ -36,25 +36,32 @@ func (s MySuite) TestAllProcs(c *C) {
 // Test that we can observe the absence of a child process before it spawns and after it exits,
 // and its presence during its lifetime.
 func (s MySuite) TestAllProcsSpawn(c *C) {
-	childprocs := func() []ProcIdStatic {
+	childprocs := func() ([]ProcIdStatic, error) {
 		found := []ProcIdStatic{}
 		procs := fs.AllProcs()
 		mypid := os.Getpid()
 		for procs.Next() {
 			procid, err := procs.GetProcId()
-			c.Assert(err, IsNil)
+			if err != nil {
+				continue
+			}
 			static, err := procs.GetStatic()
-			c.Assert(err, IsNil)
+			if err != nil {
+				continue
+			}
 			if static.ParentPid == mypid {
 				found = append(found, ProcIdStatic{procid, static})
 			}
 		}
 		err := procs.Close()
-		c.Assert(err, IsNil)
-		return found
+		if err != nil {
+			return nil, err
+		}
+		return found, nil
 	}
 
-	children1 := childprocs()
+	children1, err := childprocs()
+	c.Assert(err, IsNil)
 
 	cmd := exec.Command("/bin/cat")
 	wc, err := cmd.StdinPipe()
@@ -62,14 +69,16 @@ func (s MySuite) TestAllProcsSpawn(c *C) {
 	err = cmd.Start()
 	c.Assert(err, IsNil)
 
-	children2 := childprocs()
+	children2, err := childprocs()
+	c.Assert(err, IsNil)
 
 	err = wc.Close()
 	c.Assert(err, IsNil)
 	err = cmd.Wait()
 	c.Assert(err, IsNil)
 
-	children3 := childprocs()
+	children3, err := childprocs()
+	c.Assert(err, IsNil)
 
 	foundcat := func(procs []ProcIdStatic) bool {
 		for _, proc := range procs {

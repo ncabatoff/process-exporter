@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/ncabatoff/fakescraper"
+	common "github.com/ncabatoff/process-exporter"
+	"github.com/ncabatoff/process-exporter/config"
 	"github.com/ncabatoff/process-exporter/proc"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -30,7 +32,7 @@ accounted for as part of their parents.  This is the default behaviour.
 The -namemapping option allows assigning a group name based on a combination of
 the process name and command line.  For example, using 
 
-  -namemapping "python2,([^/]+\.py),java,-jar\s+([^/+]).jar)" 
+  -namemapping "python2,([^/]+\.py),java,-jar\s+([^/]+).jar)" 
 
 will make it so that each different python2 and java -jar invocation will be
 tracked with distinct metrics.  Processes whose remapped name is absent from
@@ -99,12 +101,12 @@ type (
 	}
 
 	nameMapperRegex struct {
-		mapping map[string]prefixRegex
+		mapping map[string]*prefixRegex
 	}
 )
 
 func parseNameMapper(s string) (*nameMapperRegex, error) {
-	mapper := make(map[string]prefixRegex)
+	mapper := make(map[string]*prefixRegex)
 	if s == "" {
 		return &nameMapperRegex{mapper}, nil
 	}
@@ -123,21 +125,33 @@ func parseNameMapper(s string) (*nameMapperRegex, error) {
 			matchName := name
 			prefix := name + ":"
 
-			nametoks := strings.Split(name, ";")
-			if len(nametoks) == 2 {
-				matchName, prefix = nametoks[0], nametoks[1]
-			}
-			// TODO handle other cases
-
 			if r, err := regexp.Compile(regexstr); err != nil {
 				return nil, fmt.Errorf("error compiling regexp '%s': %v", regexstr, err)
 			} else {
-				mapper[matchName] = prefixRegex{prefix: prefix, regex: r}
+				mapper[matchName] = &prefixRegex{prefix: prefix, regex: r}
 			}
 		}
 	}
 
 	return &nameMapperRegex{mapper}, nil
+}
+
+func (nmr *nameMapperRegex) MatchAndName(nacl common.NameAndCmdline) (bool, string) {
+	if pregex, ok := nmr.mapping[nacl.Name]; ok {
+		if pregex == nil {
+			return true, nacl.Name
+		}
+		matches := pregex.regex.FindStringSubmatch(strings.Join(nacl.Cmdline, " "))
+		if len(matches) > 1 {
+			for _, matchstr := range matches[1:] {
+				if matchstr != "" {
+					return true, pregex.prefix + matchstr
+				}
+			}
+		}
+	}
+
+	return false, ""
 }
 
 func main() {
@@ -158,6 +172,8 @@ func main() {
 			"if a proc is tracked, track with it any children that aren't part of their own group")
 		man = flag.Bool("man", false,
 			"print manual")
+		configPath = flag.String("config.path", "",
+			"path to YAML config file")
 	)
 	flag.Parse()
 
@@ -166,25 +182,40 @@ func main() {
 		return
 	}
 
-	var wantNames = make(map[string]struct{})
-	for _, s := range strings.Split(*procNames, ",") {
-		if s != "" {
-			wantNames[s] = struct{}{}
+	var matchnamer common.MatchNamer
+
+	if *configPath != "" {
+		if *nameMapping != "" || *procNames != "" {
+			log.Fatalf("-config.path cannot be used with -namemapping or -procnames")
 		}
+
+		cfg, err := config.ReadFile(*configPath)
+		if err != nil {
+			log.Fatalf("error reading config file %q: %v", *configPath, err)
+		}
+		log.Printf("Reading metrics from %s based on %q", *procfsPath, *configPath)
+		matchnamer = cfg.MatchNamers
+	} else {
+		namemapper, err := parseNameMapper(*nameMapping)
+		if err != nil {
+			log.Fatalf("Error parsing -namemapping argument '%s': %v", *nameMapping, err)
+		}
+
+		var names []string
+		for _, s := range strings.Split(*procNames, ",") {
+			if s != "" {
+				if _, ok := namemapper.mapping[s]; !ok {
+					namemapper.mapping[s] = nil
+				}
+				names = append(names, s)
+			}
+		}
+
+		log.Printf("Reading metrics from %s for procnames: %v", *procfsPath, names)
+		matchnamer = namemapper
 	}
 
-	names := make([]string, 0, len(wantNames))
-	for name := range wantNames {
-		names = append(names, name)
-	}
-	log.Printf("Reading metrics from %s for procnames: %v", *procfsPath, names)
-
-	namemapper, err := parseNameMapper(*nameMapping)
-	if err != nil {
-		log.Fatalf("Error parsing -namemapping argument '%s': %v", *nameMapping, err)
-	}
-
-	pc, err := NewProcessCollector(*procfsPath, names, *children, namemapper)
+	pc, err := NewProcessCollector(*procfsPath, *children, matchnamer)
 	if err != nil {
 		log.Fatalf("Error initializing: %v", err)
 	}
@@ -226,39 +257,25 @@ type (
 	}
 )
 
-func (nm nameMapperRegex) Name(nacl proc.NameAndCmdline) string {
-	if pregex, ok := nm.mapping[nacl.Name]; ok {
-		matches := pregex.regex.FindStringSubmatch(strings.Join(nacl.Cmdline, " "))
-		if len(matches) > 1 {
-			for _, matchstr := range matches[1:] {
-				if matchstr != "" {
-					return pregex.prefix + matchstr
-				}
-			}
-		}
-	}
-	return ""
-}
-
 func NewProcessCollector(
 	procfsPath string,
-	procnames []string,
 	children bool,
-	n proc.Namer,
+	n common.MatchNamer,
 ) (*NamedProcessCollector, error) {
 	fs, err := proc.NewFS(procfsPath)
 	if err != nil {
 		return nil, err
 	}
 	p := &NamedProcessCollector{
-		Grouper: proc.NewGrouper(procnames, children, n),
+		Grouper: proc.NewGrouper(children, n),
 		fs:      fs,
 	}
 
-	_, err = p.Update(p.fs.AllProcs())
+	permErrs, err := p.Update(p.fs.AllProcs())
 	if err != nil {
 		return nil, err
 	}
+	p.scrapePermissionErrors += permErrs
 
 	return p, nil
 }

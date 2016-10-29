@@ -1,20 +1,13 @@
 package proc
 
+import (
+	common "github.com/ncabatoff/process-exporter"
+)
+
 type (
-	NameAndCmdline struct {
-		Name    string
-		Cmdline []string
-	}
-
-	Namer interface {
-		// Map returns the name to use for a given process
-		Name(NameAndCmdline) string
-	}
-
 	Grouper struct {
-		wantProcNames map[string]struct{}
+		namer         common.MatchNamer
 		trackChildren bool
-		Namer
 		// track how much was seen last time so we can report the delta
 		GroupStats map[string]Counts
 		tracker    *Tracker
@@ -30,18 +23,12 @@ type (
 	}
 )
 
-// NewGrouper creates a Grouper that tracks the listed procnames.  Namer is used
-// to map proc names+cmdlines to a tag name.
-func NewGrouper(procnames []string, trackChildren bool, n Namer) *Grouper {
+func NewGrouper(trackChildren bool, namer common.MatchNamer) *Grouper {
 	g := Grouper{
-		wantProcNames: make(map[string]struct{}),
 		trackChildren: trackChildren,
-		Namer:         n,
+		namer:         namer,
 		GroupStats:    make(map[string]Counts),
 		tracker:       NewTracker(),
-	}
-	for _, name := range procnames {
-		g.wantProcNames[name] = struct{}{}
 	}
 	return &g
 }
@@ -95,14 +82,7 @@ func (g *Grouper) Update(iter ProcIter) (int, error) {
 	// Step 1: track any new proc that should be tracked based on its name and cmdline.
 	untracked := make(map[ProcId]ProcIdInfo)
 	for _, idinfo := range newProcs {
-		gname := g.Namer.Name(NameAndCmdline{idinfo.Name, idinfo.Cmdline})
-		wanted := false
-		if gname != "" {
-			wanted = true
-		} else {
-			gname = idinfo.Name
-			_, wanted = g.wantProcNames[gname]
-		}
+		wanted, gname := g.namer.MatchAndName(common.NameAndCmdline{idinfo.Name, idinfo.Cmdline})
 		if !wanted {
 			untracked[idinfo.ProcId] = idinfo
 			continue

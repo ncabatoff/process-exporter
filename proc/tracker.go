@@ -96,6 +96,7 @@ func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, int, error) {
 		if err != nil {
 			if os.IsPermission(err) {
 				permissionErrors++
+				t.Ignore(procId)
 			}
 			continue
 		}

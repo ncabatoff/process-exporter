@@ -2,13 +2,25 @@ package proc
 
 import (
 	"github.com/kylelemons/godebug/pretty"
+	common "github.com/ncabatoff/process-exporter"
 	. "gopkg.in/check.v1"
 )
 
-type nevernamer struct{}
+type namer map[string]struct{}
 
-func (i nevernamer) Name(nacl NameAndCmdline) string {
-	return ""
+func newNamer(names ...string) namer {
+	nr := make(namer, len(names))
+	for _, name := range names {
+		nr[name] = struct{}{}
+	}
+	return nr
+}
+
+func (n namer) MatchAndName(nacl common.NameAndCmdline) (bool, string) {
+	if _, ok := n[nacl.Name]; ok {
+		return true, nacl.Name
+	}
+	return false, ""
 }
 
 // Test core group() functionality, i.e things not related to namers or parents
@@ -22,7 +34,7 @@ func (s MySuite) TestGrouperBasic(c *C) {
 			ProcMetrics: m,
 		}
 	}
-	gr := NewGrouper([]string{"g1", "g2"}, false, nevernamer{})
+	gr := NewGrouper(false, newNamer("g1", "g2"))
 	p1 := newProc(1, "g1", ProcMetrics{1, 2, 3, 4, 5})
 	p2 := newProc(2, "g2", ProcMetrics{2, 3, 4, 5, 6})
 	p3 := newProc(3, "g3", ProcMetrics{})
@@ -95,7 +107,7 @@ func (s MySuite) TestGrouperParents(c *C) {
 			ProcMetrics: ProcMetrics{},
 		}
 	}
-	gr := NewGrouper([]string{"g1", "g2"}, true, nevernamer{})
+	gr := NewGrouper(true, newNamer("g1", "g2"))
 	p1 := newProc(1, 0, "g1")
 	p2 := newProc(2, 0, "g2")
 	p3 := newProc(3, 0, "g3")
@@ -155,7 +167,7 @@ func (s MySuite) TestGrouperGroup(c *C) {
 			ProcMetrics: m,
 		}
 	}
-	gr := NewGrouper([]string{"g1"}, false, nevernamer{})
+	gr := NewGrouper(false, newNamer("g1"))
 
 	// First call should return zero CPU/IO.
 	p1 := newProc(1, "g1", ProcMetrics{1, 2, 3, 4, 5})
@@ -199,7 +211,7 @@ func (s MySuite) TestGrouperNonDecreasing(c *C) {
 			ProcMetrics: m,
 		}
 	}
-	gr := NewGrouper([]string{"g1", "g2"}, false, nevernamer{})
+	gr := NewGrouper(false, newNamer("g1", "g2"))
 	p1 := newProc(1, "g1", ProcMetrics{1, 2, 3, 4, 5})
 	p2 := newProc(2, "g2", ProcMetrics{2, 3, 4, 5, 6})
 

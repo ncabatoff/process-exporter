@@ -109,6 +109,12 @@
 			"path": "gopkg.in/check.v1",
 			"revision": "871360013c92e1c715c2de6d06b54899468a8a2d",
 			"revisionTime": "2014-04-01T16:00:02Z"
+		},
+		{
+			"checksumSHA1": "lJHPwsxC3Xws7TIRUrB3Ki5HqkU=",
+			"path": "gopkg.in/yaml.v2",
+			"revision": "a5b47d31c556af34a302ce5d659e6fea44d90de0",
+			"revisionTime": "2016-09-28T15:37:09Z"
 		}
 	],
 	"rootPath": "github.com/ncabatoff/process-exporter"

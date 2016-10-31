@@ -4,6 +4,7 @@ import (
 	"github.com/kylelemons/godebug/pretty"
 	common "github.com/ncabatoff/process-exporter"
 	. "gopkg.in/check.v1"
+	"time"
 )
 
 type namer map[string]struct{}
@@ -44,8 +45,8 @@ func (s MySuite) TestGrouperBasic(c *C) {
 
 	got1 := gr.groups()
 	want1 := GroupCountMap{
-		"g1": Groupcounts{Counts{0, 0, 0}, 1, 4, 5},
-		"g2": Groupcounts{Counts{0, 0, 0}, 1, 5, 6},
+		"g1": GroupCounts{Counts{0, 0, 0}, 1, 4, 5, time.Time{}},
+		"g2": GroupCounts{Counts{0, 0, 0}, 1, 5, 6, time.Time{}},
 	}
 	c.Check(got1, DeepEquals, want1)
 
@@ -58,8 +59,8 @@ func (s MySuite) TestGrouperBasic(c *C) {
 
 	got2 := gr.groups()
 	want2 := GroupCountMap{
-		"g1": Groupcounts{Counts{1, 1, 1}, 1, 5, 6},
-		"g2": Groupcounts{Counts{2, 2, 2}, 1, 7, 8},
+		"g1": GroupCounts{Counts{1, 1, 1}, 1, 5, 6, time.Time{}},
+		"g2": GroupCounts{Counts{2, 2, 2}, 1, 7, 8, time.Time{}},
 	}
 	c.Check(got2, DeepEquals, want2)
 
@@ -75,8 +76,8 @@ func (s MySuite) TestGrouperBasic(c *C) {
 
 	got3 := gr.groups()
 	want3 := GroupCountMap{
-		"g1": Groupcounts{Counts{0, 0, 0}, 1, 5, 6},
-		"g2": Groupcounts{Counts{1, 1, 1}, 2, 9, 10},
+		"g1": GroupCounts{Counts{0, 0, 0}, 1, 5, 6, time.Time{}},
+		"g2": GroupCounts{Counts{1, 1, 1}, 2, 9, 10, time.Time{}},
 	}
 	c.Check(got3, DeepEquals, want3, Commentf("diff %s", pretty.Compare(got3, want3)))
 
@@ -88,8 +89,8 @@ func (s MySuite) TestGrouperBasic(c *C) {
 
 	got4 := gr.groups()
 	want4 := GroupCountMap{
-		"g1": Groupcounts{Counts{0, 0, 0}, 1, 5, 6},
-		"g2": Groupcounts{Counts{2, 2, 2}, 2, 10, 11},
+		"g1": GroupCounts{Counts{0, 0, 0}, 1, 5, 6, time.Time{}},
+		"g2": GroupCounts{Counts{2, 2, 2}, 2, 10, 11, time.Time{}},
 	}
 	c.Check(got4, DeepEquals, want4, Commentf("diff %s", pretty.Compare(got4, want4)))
 
@@ -117,8 +118,8 @@ func (s MySuite) TestGrouperParents(c *C) {
 
 	got1 := gr.groups()
 	want1 := GroupCountMap{
-		"g1": Groupcounts{Counts{}, 1, 0, 0},
-		"g2": Groupcounts{Counts{}, 1, 0, 0},
+		"g1": GroupCounts{Counts{}, 1, 0, 0, time.Time{}},
+		"g2": GroupCounts{Counts{}, 1, 0, 0, time.Time{}},
 	}
 	c.Check(got1, DeepEquals, want1, Commentf("diff %s", pretty.Compare(got1, want1)))
 
@@ -134,8 +135,8 @@ func (s MySuite) TestGrouperParents(c *C) {
 
 	got2 := gr.groups()
 	want2 := GroupCountMap{
-		"g1": Groupcounts{Counts{}, 2, 0, 0},
-		"g2": Groupcounts{Counts{}, 2, 0, 0},
+		"g1": GroupCounts{Counts{}, 2, 0, 0, time.Time{}},
+		"g2": GroupCounts{Counts{}, 2, 0, 0, time.Time{}},
 	}
 	c.Check(got2, DeepEquals, want2, Commentf("diff %s", pretty.Compare(got2, want2)))
 
@@ -150,8 +151,8 @@ func (s MySuite) TestGrouperParents(c *C) {
 
 	got3 := gr.groups()
 	want3 := GroupCountMap{
-		"g1": Groupcounts{Counts{}, 1, 0, 0},
-		"g2": Groupcounts{Counts{}, 5, 0, 0},
+		"g1": GroupCounts{Counts{}, 1, 0, 0, time.Time{}},
+		"g2": GroupCounts{Counts{}, 5, 0, 0, time.Time{}},
 	}
 	c.Check(got3, DeepEquals, want3, Commentf("diff %s", pretty.Compare(got3, want3)))
 }
@@ -175,7 +176,7 @@ func (s MySuite) TestGrouperGroup(c *C) {
 	c.Assert(err, IsNil)
 	got1 := gr.Groups()
 	want1 := GroupCountMap{
-		"g1": Groupcounts{Counts{0, 0, 0}, 1, 4, 5},
+		"g1": GroupCounts{Counts{0, 0, 0}, 1, 4, 5, time.Time{}},
 	}
 	c.Check(got1, DeepEquals, want1)
 
@@ -186,7 +187,7 @@ func (s MySuite) TestGrouperGroup(c *C) {
 	c.Assert(err, IsNil)
 	got2 := gr.Groups()
 	want2 := GroupCountMap{
-		"g1": Groupcounts{Counts{1, 1, 1}, 1, 5, 6},
+		"g1": GroupCounts{Counts{1, 1, 1}, 1, 5, 6, time.Time{}},
 	}
 	c.Check(got2, DeepEquals, want2)
 
@@ -195,7 +196,7 @@ func (s MySuite) TestGrouperGroup(c *C) {
 	c.Assert(err, IsNil)
 	got3 := gr.Groups()
 	want3 := GroupCountMap{
-		"g1": Groupcounts{Counts{1, 1, 1}, 1, 5, 6},
+		"g1": GroupCounts{Counts{1, 1, 1}, 1, 5, 6, time.Time{}},
 	}
 	c.Check(got3, DeepEquals, want3, Commentf("diff %s", pretty.Compare(got3, want3)))
 }
@@ -220,8 +221,8 @@ func (s MySuite) TestGrouperNonDecreasing(c *C) {
 
 	got1 := gr.Groups()
 	want1 := GroupCountMap{
-		"g1": Groupcounts{Counts{0, 0, 0}, 1, 4, 5},
-		"g2": Groupcounts{Counts{0, 0, 0}, 1, 5, 6},
+		"g1": GroupCounts{Counts{0, 0, 0}, 1, 4, 5, time.Time{}},
+		"g2": GroupCounts{Counts{0, 0, 0}, 1, 5, 6, time.Time{}},
 	}
 	c.Check(got1, DeepEquals, want1)
 
@@ -234,8 +235,8 @@ func (s MySuite) TestGrouperNonDecreasing(c *C) {
 
 	got2 := gr.Groups()
 	want2 := GroupCountMap{
-		"g1": Groupcounts{Counts{1, 1, 1}, 1, 5, 6},
-		"g2": Groupcounts{Counts{2, 2, 2}, 2, 8, 9},
+		"g1": GroupCounts{Counts{1, 1, 1}, 1, 5, 6, time.Time{}},
+		"g2": GroupCounts{Counts{2, 2, 2}, 2, 8, 9, time.Time{}},
 	}
 	c.Check(got2, DeepEquals, want2)
 
@@ -246,8 +247,8 @@ func (s MySuite) TestGrouperNonDecreasing(c *C) {
 
 	got3 := gr.Groups()
 	want3 := GroupCountMap{
-		"g1": Groupcounts{Counts{1, 1, 1}, 1, 5, 6},
-		"g2": Groupcounts{Counts{3, 4, 5}, 1, 5, 6},
+		"g1": GroupCounts{Counts{1, 1, 1}, 1, 5, 6, time.Time{}},
+		"g2": GroupCounts{Counts{3, 4, 5}, 1, 5, 6, time.Time{}},
 	}
 	c.Check(got3, DeepEquals, want3, Commentf("diff %s", pretty.Compare(got3, want3)))
 
@@ -258,8 +259,8 @@ func (s MySuite) TestGrouperNonDecreasing(c *C) {
 
 	got4 := gr.Groups()
 	want4 := GroupCountMap{
-		"g1": Groupcounts{Counts{1, 1, 1}, 0, 0, 0},
-		"g2": Groupcounts{Counts{5, 5, 5}, 1, 2, 1},
+		"g1": GroupCounts{Counts{1, 1, 1}, 0, 0, 0, time.Time{}},
+		"g2": GroupCounts{Counts{5, 5, 5}, 1, 2, 1, time.Time{}},
 	}
 	c.Check(got4, DeepEquals, want4, Commentf("diff %s\n%s", pretty.Compare(got4, want4), pretty.Sprint(gr)))
 

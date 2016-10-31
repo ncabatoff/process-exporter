@@ -81,6 +81,12 @@ var (
 		[]string{"groupname", "memtype"},
 		nil)
 
+	startTimeDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_oldest_start_time_seconds",
+		"start time in seconds since 1970/01/01 of oldest process in group",
+		[]string{"groupname"},
+		nil)
+
 	scrapeErrorsDesc = prometheus.NewDesc(
 		"namedprocess_scrape_errors",
 		"non-permission scrape errors",
@@ -287,6 +293,7 @@ func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- readBytesDesc
 	ch <- writeBytesDesc
 	ch <- membytesDesc
+	ch <- startTimeDesc
 	ch <- scrapeErrorsDesc
 	ch <- scrapePermissionErrorsDesc
 }
@@ -306,6 +313,8 @@ func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
 				prometheus.GaugeValue, float64(gcounts.Memresident), gname, "resident")
 			ch <- prometheus.MustNewConstMetric(membytesDesc,
 				prometheus.GaugeValue, float64(gcounts.Memvirtual), gname, "virtual")
+			ch <- prometheus.MustNewConstMetric(startTimeDesc,
+				prometheus.GaugeValue, float64(gcounts.OldestStartTime.Unix()), gname)
 			ch <- prometheus.MustNewConstMetric(cpuSecsDesc,
 				prometheus.CounterValue, gcounts.Cpu, gname)
 			ch <- prometheus.MustNewConstMetric(readBytesDesc,

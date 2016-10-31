@@ -2,6 +2,7 @@ package proc
 
 import (
 	common "github.com/ncabatoff/process-exporter"
+	"time"
 )
 
 type (
@@ -13,13 +14,14 @@ type (
 		tracker    *Tracker
 	}
 
-	GroupCountMap map[string]Groupcounts
+	GroupCountMap map[string]GroupCounts
 
-	Groupcounts struct {
+	GroupCounts struct {
 		Counts
-		Procs       int
-		Memresident uint64
-		Memvirtual  uint64
+		Procs           int
+		Memresident     uint64
+		Memvirtual      uint64
+		OldestStartTime time.Time
 	}
 )
 
@@ -112,25 +114,29 @@ func (g *Grouper) Update(iter ProcIter) (int, error) {
 func (g *Grouper) groups() GroupCountMap {
 	gcounts := make(GroupCountMap)
 
+	var zeroTime time.Time
 	for _, tinfo := range g.tracker.Tracked {
 		if tinfo == nil {
 			continue
 		}
 		cur := gcounts[tinfo.GroupName]
 		cur.Procs++
-		_, counts, mem := tinfo.GetStats()
+		_, counts, mem, start := tinfo.GetStats()
 		cur.Memresident += mem.Resident
 		cur.Memvirtual += mem.Virtual
 		cur.Counts.Cpu += counts.Cpu
 		cur.Counts.ReadBytes += counts.ReadBytes
 		cur.Counts.WriteBytes += counts.WriteBytes
+		if cur.OldestStartTime == zeroTime || start.Before(cur.OldestStartTime) {
+			cur.OldestStartTime = start
+		}
 		gcounts[tinfo.GroupName] = cur
 	}
 
 	return gcounts
 }
 
-// Groups returns Groupcounts with Counts that never decrease in value from one
+// Groups returns GroupCounts with Counts that never decrease in value from one
 // call to the next.  Even if processes exit, their CPU and IO contributions up
 // to that point are included in the results.  Even if no processes remain
 // in a group it will still be included in the results.
@@ -152,7 +158,7 @@ func (g *Grouper) Groups() GroupCountMap {
 	// Now add any groups that were observed in the past but aren't running now.
 	for gname, gcounts := range g.GroupStats {
 		if _, ok := groups[gname]; !ok {
-			groups[gname] = Groupcounts{Counts: gcounts}
+			groups[gname] = GroupCounts{Counts: gcounts}
 		}
 	}
 

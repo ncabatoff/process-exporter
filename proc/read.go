@@ -3,10 +3,11 @@ package proc
 import (
 	"fmt"
 	"github.com/prometheus/procfs"
+	"time"
 )
 
 func newProcIdStatic(pid, ppid int, startTime uint64, name string, cmdline []string) ProcIdStatic {
-	return ProcIdStatic{ProcId{pid, startTime}, ProcStatic{name, cmdline, ppid}}
+	return ProcIdStatic{ProcId{pid, startTime}, ProcStatic{name, cmdline, ppid, time.Time{}}}
 }
 
 type (
@@ -24,6 +25,7 @@ type (
 		Name      string
 		Cmdline   []string
 		ParentPid int
+		StartTime time.Time
 	}
 
 	// ProcMetrics contains data read from /proc/pid/*
@@ -73,10 +75,11 @@ type (
 	// proc is a wrapper for procfs.Proc that caches results of some reads and implements Proc.
 	proc struct {
 		procfs.Proc
-		procid  *ProcId
-		stat    *procfs.ProcStat
-		cmdline []string
-		io      *procfs.ProcIO
+		procid   *ProcId
+		stat     *procfs.ProcStat
+		cmdline  []string
+		io       *procfs.ProcIO
+		bootTime int64
 	}
 
 	procs interface {
@@ -84,7 +87,10 @@ type (
 		length() int
 	}
 
-	procfsprocs []procfs.Proc
+	procfsprocs struct {
+		Procs    []procfs.Proc
+		bootTime int64
+	}
 
 	// ProcIter is an iterator over a sequence of procs.
 	ProcIter interface {
@@ -158,11 +164,11 @@ func (p ProcIdInfo) GetMetrics() (ProcMetrics, error) {
 }
 
 func (p procfsprocs) get(i int) Proc {
-	return &proc{Proc: p[i]}
+	return &proc{Proc: p.Procs[i], bootTime: p.bootTime}
 }
 
 func (p procfsprocs) length() int {
-	return len(p)
+	return len(p.Procs)
 }
 
 func (p *proc) GetPid() int {
@@ -224,10 +230,13 @@ func (p proc) GetStatic() (ProcStatic, error) {
 	if err != nil {
 		return ProcStatic{}, err
 	}
+	startTime := time.Unix(p.bootTime, 0)
+	startTime = startTime.Add(time.Second / userHZ * time.Duration(stat.Starttime))
 	return ProcStatic{
 		Name:      stat.Comm,
 		Cmdline:   cmdline,
 		ParentPid: stat.PPID,
+		StartTime: startTime,
 	}, nil
 }
 
@@ -251,7 +260,11 @@ func (p proc) GetMetrics() (ProcMetrics, error) {
 
 type FS struct {
 	procfs.FS
+	BootTime int64
 }
+
+// See https://github.com/prometheus/procfs/blob/master/proc_stat.go for details on userHZ.
+const userHZ = 100
 
 // NewFS returns a new FS mounted under the given mountPoint. It will error
 // if the mount point can't be read.
@@ -260,7 +273,11 @@ func NewFS(mountPoint string) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FS{fs}, nil
+	stat, err := fs.NewStat()
+	if err != nil {
+		return nil, err
+	}
+	return &FS{fs, stat.BootTime}, nil
 }
 
 func (fs *FS) AllProcs() ProcIter {
@@ -268,7 +285,7 @@ func (fs *FS) AllProcs() ProcIter {
 	if err != nil {
 		err = fmt.Errorf("Error reading procs: %v", err)
 	}
-	return &procIterator{procs: procfsprocs(procs), err: err, idx: -1}
+	return &procIterator{procs: procfsprocs{procs, fs.BootTime}, err: err, idx: -1}
 }
 
 func (pi *procIterator) Next() bool {

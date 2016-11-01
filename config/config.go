@@ -49,6 +49,7 @@ type (
 	}
 
 	templateParams struct {
+		Comm    string
 		ExeBase string
 		ExeFull string
 		Matches map[string]string
@@ -80,7 +81,8 @@ func (m *matchNamer) MatchAndName(nacl common.NameAndCmdline) (bool, string) {
 
 	var buf bytes.Buffer
 	m.template.Execute(&buf, &templateParams{
-		ExeBase: filepath.Base(nacl.Name),
+		Comm:    nacl.Name,
+		ExeBase: filepath.Base(nacl.Cmdline[0]),
 		ExeFull: nacl.Cmdline[0],
 		Matches: matches,
 	})
@@ -114,7 +116,12 @@ func (m *cmdlineMatcher) Match(nacl common.NameAndCmdline) bool {
 		if m.captures == nil {
 			return false
 		}
-		for i, name := range regex.SubexpNames() {
+		subexpNames := regex.SubexpNames()
+		if len(subexpNames) != len(captures) {
+			return false
+		}
+
+		for i, name := range subexpNames {
 			m.captures[name] = captures[i]
 		}
 	}

@@ -255,7 +255,13 @@ func main() {
 }
 
 type (
+	scrapeRequest struct {
+		results chan<- prometheus.Metric
+		done    chan struct{}
+	}
+
 	NamedProcessCollector struct {
+		scrapeChan chan scrapeRequest
 		*proc.Grouper
 		fs                     *proc.FS
 		scrapeErrors           int
@@ -273,8 +279,9 @@ func NewProcessCollector(
 		return nil, err
 	}
 	p := &NamedProcessCollector{
-		Grouper: proc.NewGrouper(children, n),
-		fs:      fs,
+		scrapeChan: make(chan scrapeRequest),
+		Grouper:    proc.NewGrouper(children, n),
+		fs:         fs,
 	}
 
 	permErrs, err := p.Update(p.fs.AllProcs())
@@ -282,6 +289,8 @@ func NewProcessCollector(
 		return nil, err
 	}
 	p.scrapePermissionErrors += permErrs
+
+	go p.start()
 
 	return p, nil
 }
@@ -300,6 +309,20 @@ func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect implements prometheus.Collector.
 func (p *NamedProcessCollector) Collect(ch chan<- prometheus.Metric) {
+	req := scrapeRequest{results: ch, done: make(chan struct{})}
+	p.scrapeChan <- req
+	<-req.done
+}
+
+func (p *NamedProcessCollector) start() {
+	for req := range p.scrapeChan {
+		ch := req.results
+		p.scrape(ch)
+		req.done <- struct{}{}
+	}
+}
+
+func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 	permErrs, err := p.Update(p.fs.AllProcs())
 	p.scrapePermissionErrors += permErrs
 	if err != nil {

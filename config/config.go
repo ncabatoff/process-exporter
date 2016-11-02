@@ -79,11 +79,17 @@ func (m *matchNamer) MatchAndName(nacl common.NameAndCmdline) (bool, string) {
 		}
 	}
 
+	exebase, exefull := nacl.Name, nacl.Name
+	if len(nacl.Cmdline) > 0 {
+		exefull = nacl.Cmdline[0]
+		exebase = filepath.Base(exefull)
+	}
+
 	var buf bytes.Buffer
 	m.template.Execute(&buf, &templateParams{
 		Comm:    nacl.Name,
-		ExeBase: filepath.Base(nacl.Cmdline[0]),
-		ExeFull: nacl.Cmdline[0],
+		ExeBase: exebase,
+		ExeFull: exefull,
 		Matches: matches,
 	})
 	return true, buf.String()

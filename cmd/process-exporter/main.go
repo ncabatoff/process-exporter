@@ -17,35 +17,50 @@ import (
 )
 
 func printManual() {
-	fmt.Print(`process-exporter -procnames name1,...,nameN [options]
+	fmt.Print(`Usage:
+  process-exporter [options] -config.path filename.yml
 
-Every process not in the procnames list is ignored.  Otherwise, all processes
-found are reported on as a group based on the process name they share. 
-Here 'process name' refers to the value found in the second field of
-/proc/<pid>/stat, which is truncated at 15 chars.
+or 
 
-The -children option makes it so that any process that otherwise isn't part of
-its own group becomes part of the first group found (if any) when walking the
-process tree upwards.  In other words, subprocesses resource usage gets
-accounted for as part of their parents.  This is the default behaviour.
+  process-exporter [options] -procnames name1,...,nameN [-namemapping k1,v1,...,kN,vN]
 
-The -namemapping option allows assigning a group name based on a combination of
-the process name and command line.  For example, using 
+The recommended option is to use a config file, but for convenience and
+backwards compatability the -procnames/-namemapping options exist as an
+alternative.
+ 
+The -children option (default:true) makes it so that any process that otherwise
+isn't part of its own group becomes part of the first group found (if any) when
+walking the process tree upwards.  In other words, resource usage of
+subprocesses is added to their parent's usage unless the subprocess identifies
+as a different group name.
 
-  -namemapping "python2,([^/]+\.py),java,-jar\s+([^/]+).jar)" 
+Command-line process selection (procnames/namemapping):
 
-will make it so that each different python2 and java -jar invocation will be
-tracked with distinct metrics.  Processes whose remapped name is absent from
-the procnames list will be ignored.  Here's an example that I run on my home
-machine (Ubuntu Xenian):
+  Every process not in the procnames list is ignored.  Otherwise, all processes
+  found are reported on as a group based on the process name they share. 
+  Here 'process name' refers to the value found in the second field of
+  /proc/<pid>/stat, which is truncated at 15 chars.
 
-  process-exporter -namemapping "upstart,(--user)" \
-    -procnames chromium-browse,bash,prometheus,prombench,gvim,upstart:-user
+  The -namemapping option allows assigning a group name based on a combination of
+  the process name and command line.  For example, using 
 
-Since it appears that upstart --user is the parent process of my X11 session,
-this will make all apps I start count against it, unless they're one of the
-others named explicitly with -procnames.
+    -namemapping "python2,([^/]+\.py),java,-jar\s+([^/]+).jar)" 
 
+  will make it so that each different python2 and java -jar invocation will be
+  tracked with distinct metrics.  Processes whose remapped name is absent from
+  the procnames list will be ignored.  Here's an example that I run on my home
+  machine (Ubuntu Xenian):
+
+    process-exporter -namemapping "upstart,(--user)" \
+      -procnames chromium-browse,bash,prometheus,prombench,gvim,upstart:-user
+
+  Since it appears that upstart --user is the parent process of my X11 session,
+  this will make all apps I start count against it, unless they're one of the
+  others named explicitly with -procnames.
+
+Config file process selection (filename.yml):
+
+  See README.md.
 ` + "\n")
 
 }
@@ -111,6 +126,7 @@ type (
 	}
 )
 
+// Create a nameMapperRegex based on a string given as the -namemapper argument.
 func parseNameMapper(s string) (*nameMapperRegex, error) {
 	mapper := make(map[string]*prefixRegex)
 	if s == "" {

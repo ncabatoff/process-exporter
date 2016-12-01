@@ -22,6 +22,7 @@ type (
 		Memresident     uint64
 		Memvirtual      uint64
 		OldestStartTime time.Time
+		OpenFDs         uint64
 	}
 )
 
@@ -121,9 +122,10 @@ func (g *Grouper) groups() GroupCountMap {
 		}
 		cur := gcounts[tinfo.GroupName]
 		cur.Procs++
-		_, counts, mem, start := tinfo.GetStats()
+		_, counts, mem, fds, start := tinfo.GetStats()
 		cur.Memresident += mem.Resident
 		cur.Memvirtual += mem.Virtual
+		cur.OpenFDs += fds.Open
 		cur.Counts.Cpu += counts.Cpu
 		cur.Counts.ReadBytes += counts.ReadBytes
 		cur.Counts.WriteBytes += counts.WriteBytes

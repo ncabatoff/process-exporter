@@ -17,6 +17,9 @@ type (
 		Resident uint64
 		Virtual  uint64
 	}
+	Filedesc struct {
+		Open uint64
+	}
 
 	// Tracker tracks processes and records metrics.
 	Tracker struct {
@@ -53,8 +56,8 @@ func (tp *TrackedProc) GetCmdLine() []string {
 	return tp.info.Cmdline
 }
 
-func (tp *TrackedProc) GetStats() (aggregate, latest Counts, mem Memory, start time.Time) {
-	return tp.accum, tp.lastaccum, Memory{Resident: tp.info.ResidentBytes, Virtual: tp.info.VirtualBytes}, tp.info.StartTime
+func (tp *TrackedProc) GetStats() (aggregate, latest Counts, mem Memory, fds Filedesc, start time.Time) {
+	return tp.accum, tp.lastaccum, Memory{Resident: tp.info.ResidentBytes, Virtual: tp.info.VirtualBytes}, Filedesc{Open: tp.info.OpenFDs}, tp.info.StartTime
 }
 
 func NewTracker() *Tracker {

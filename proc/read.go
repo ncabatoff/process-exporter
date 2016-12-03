@@ -35,6 +35,7 @@ type (
 		WriteBytes    uint64
 		ResidentBytes uint64
 		VirtualBytes  uint64
+		OpenFDs       uint64
 	}
 
 	ProcIdStatic struct {
@@ -249,12 +250,17 @@ func (p proc) GetMetrics() (ProcMetrics, error) {
 	if err != nil {
 		return ProcMetrics{}, err
 	}
+	fds, err := p.Proc.FileDescriptors()
+	if err != nil {
+		return ProcMetrics{}, err
+	}
 	return ProcMetrics{
 		CpuTime:       stat.CPUTime(),
 		ReadBytes:     io.ReadBytes,
 		WriteBytes:    io.WriteBytes,
 		ResidentBytes: uint64(stat.ResidentMemory()),
 		VirtualBytes:  uint64(stat.VirtualMemory()),
+		OpenFDs:       uint64(len(fds)),
 	}, nil
 }
 

@@ -44,7 +44,7 @@ Command-line process selection (procnames/namemapping):
   The -namemapping option allows assigning a group name based on a combination of
   the process name and command line.  For example, using 
 
-    -namemapping "python2,([^/]+\.py),java,-jar\s+([^/]+).jar)" 
+    -namemapping "python2,([^/]+)\.py,java,-jar\s+([^/]+).jar" 
 
   will make it so that each different python2 and java -jar invocation will be
   tracked with distinct metrics.  Processes whose remapped name is absent from

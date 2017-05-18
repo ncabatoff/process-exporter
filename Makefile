@@ -26,7 +26,7 @@ ifdef DEBUG
 endif
 
 
-all: format build test
+all: format vet build test
 
 style:
 	@echo ">> checking code style"

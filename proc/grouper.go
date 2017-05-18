@@ -85,7 +85,7 @@ func (g *Grouper) Update(iter ProcIter) (int, error) {
 	// Step 1: track any new proc that should be tracked based on its name and cmdline.
 	untracked := make(map[ProcId]ProcIdInfo)
 	for _, idinfo := range newProcs {
-		wanted, gname := g.namer.MatchAndName(common.NameAndCmdline{idinfo.Name, idinfo.Cmdline})
+		wanted, gname := g.namer.MatchAndName(common.NameAndCmdline{Name: idinfo.Name, Cmdline: idinfo.Cmdline})
 		if !wanted {
 			untracked[idinfo.ProcId] = idinfo
 			continue

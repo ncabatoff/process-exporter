@@ -20,9 +20,9 @@ process_names:
 	c.Assert(err, IsNil)
 	c.Check(cfg.MatchNamers, HasLen, 3)
 
-	bash := common.NameAndCmdline{"bash", []string{"/bin/bash"}}
-	sh := common.NameAndCmdline{"sh", []string{"sh"}}
-	ksh := common.NameAndCmdline{"ksh", []string{"/bin/ksh"}}
+	bash := common.NameAndCmdline{Name: "bash", Cmdline: []string{"/bin/bash"}}
+	sh := common.NameAndCmdline{Name: "sh", Cmdline: []string{"sh"}}
+	ksh := common.NameAndCmdline{Name: "ksh", Cmdline: []string{"/bin/ksh"}}
 
 	found, name := cfg.MatchNamers[0].MatchAndName(bash)
 	c.Check(found, Equals, true)
@@ -65,12 +65,12 @@ process_names:
 	c.Assert(err, IsNil)
 	c.Check(cfg.MatchNamers, HasLen, 2)
 
-	postgres := common.NameAndCmdline{"postmaster", []string{"/usr/bin/postmaster", "-D", "/data/pg"}}
+	postgres := common.NameAndCmdline{Name: "postmaster", Cmdline: []string{"/usr/bin/postmaster", "-D", "/data/pg"}}
 	found, name := cfg.MatchNamers[0].MatchAndName(postgres)
 	c.Check(found, Equals, true)
 	c.Check(name, Equals, "postmaster:pg")
 
-	pm := common.NameAndCmdline{"prometheus", []string{"/usr/local/bin/prometheus"}}
+	pm := common.NameAndCmdline{Name: "prometheus", Cmdline: []string{"/usr/local/bin/prometheus"}}
 	found, name = cfg.MatchNamers[1].MatchAndName(pm)
 	c.Check(found, Equals, true)
 	c.Check(name, Equals, "/usr/local/bin/prometheus")

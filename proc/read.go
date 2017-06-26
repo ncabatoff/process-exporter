@@ -36,6 +36,7 @@ type (
 		ResidentBytes uint64
 		VirtualBytes  uint64
 		OpenFDs       uint64
+		MaxFDs        uint64
 	}
 
 	ProcIdStatic struct {
@@ -250,7 +251,11 @@ func (p proc) GetMetrics() (ProcMetrics, error) {
 	if err != nil {
 		return ProcMetrics{}, err
 	}
-	fds, err := p.Proc.FileDescriptors()
+	numfds, err := p.Proc.FileDescriptorsLen()
+	if err != nil {
+		return ProcMetrics{}, err
+	}
+	limits, err := p.NewLimits()
 	if err != nil {
 		return ProcMetrics{}, err
 	}
@@ -260,7 +265,8 @@ func (p proc) GetMetrics() (ProcMetrics, error) {
 		WriteBytes:    io.WriteBytes,
 		ResidentBytes: uint64(stat.ResidentMemory()),
 		VirtualBytes:  uint64(stat.VirtualMemory()),
-		OpenFDs:       uint64(len(fds)),
+		OpenFDs:       uint64(numfds),
+		MaxFDs:        uint64(limits.OpenFiles),
 	}, nil
 }
 

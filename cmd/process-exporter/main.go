@@ -102,6 +102,12 @@ var (
 		[]string{"groupname"},
 		nil)
 
+	worstFDRatioDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_worst_fd_ratio",
+		"the worst (closest to 1) ratio between open fds and max fds among all procs in this group",
+		[]string{"groupname"},
+		nil)
+
 	startTimeDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_oldest_start_time_seconds",
 		"start time in seconds since 1970/01/01 of oldest process in group",
@@ -325,6 +331,7 @@ func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- writeBytesDesc
 	ch <- membytesDesc
 	ch <- openFDsDesc
+	ch <- worstFDRatioDesc
 	ch <- startTimeDesc
 	ch <- scrapeErrorsDesc
 	ch <- scrapePermissionErrorsDesc
@@ -363,6 +370,8 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 				prometheus.GaugeValue, float64(gcounts.OldestStartTime.Unix()), gname)
 			ch <- prometheus.MustNewConstMetric(openFDsDesc,
 				prometheus.GaugeValue, float64(gcounts.OpenFDs), gname)
+			ch <- prometheus.MustNewConstMetric(worstFDRatioDesc,
+				prometheus.GaugeValue, float64(gcounts.WorstFDratio), gname)
 			ch <- prometheus.MustNewConstMetric(cpuSecsDesc,
 				prometheus.CounterValue, gcounts.Cpu, gname)
 			ch <- prometheus.MustNewConstMetric(readBytesDesc,

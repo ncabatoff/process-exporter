@@ -23,6 +23,7 @@ type (
 		Memvirtual      uint64
 		OldestStartTime time.Time
 		OpenFDs         uint64
+		WorstFDratio    float64
 	}
 )
 
@@ -122,15 +123,19 @@ func (g *Grouper) groups() GroupCountMap {
 		}
 		cur := gcounts[tinfo.GroupName]
 		cur.Procs++
-		_, counts, mem, fds, start := tinfo.GetStats()
-		cur.Memresident += mem.Resident
-		cur.Memvirtual += mem.Virtual
-		cur.OpenFDs += fds.Open
-		cur.Counts.Cpu += counts.Cpu
-		cur.Counts.ReadBytes += counts.ReadBytes
-		cur.Counts.WriteBytes += counts.WriteBytes
-		if cur.OldestStartTime == zeroTime || start.Before(cur.OldestStartTime) {
-			cur.OldestStartTime = start
+		tstats := tinfo.GetStats()
+		cur.Memresident += tstats.Memory.Resident
+		cur.Memvirtual += tstats.Memory.Virtual
+		cur.OpenFDs += tstats.Filedesc.Open
+		openratio := float64(tstats.Filedesc.Open) / float64(tstats.Filedesc.Limit)
+		if cur.WorstFDratio < openratio {
+			cur.WorstFDratio = openratio
+		}
+		cur.Counts.Cpu += tstats.latest.Cpu
+		cur.Counts.ReadBytes += tstats.latest.ReadBytes
+		cur.Counts.WriteBytes += tstats.latest.WriteBytes
+		if cur.OldestStartTime == zeroTime || tstats.start.Before(cur.OldestStartTime) {
+			cur.OldestStartTime = tstats.start
 		}
 		gcounts[tinfo.GroupName] = cur
 	}

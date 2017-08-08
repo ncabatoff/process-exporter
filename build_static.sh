@@ -7,7 +7,7 @@ set -ex
 apk update
 apk add git go libc-dev make
 
-# Build the openvpn_exporter.
+# Build the process-exporter.
 cd /gopath/src/github.com/ncabatoff/process-exporter
 export GOPATH=/gopath
 make build

@@ -15,6 +15,7 @@
 package pretty
 
 import (
+	"encoding"
 	"fmt"
 	"reflect"
 	"sort"
@@ -31,10 +32,26 @@ func isZeroVal(val reflect.Value) bool {
 func (c *Config) val2node(val reflect.Value) node {
 	// TODO(kevlar): pointer tracking?
 
-	if c.PrintStringers && val.CanInterface() {
-		stringer, ok := val.Interface().(fmt.Stringer)
-		if ok {
-			return stringVal(stringer.String())
+	if !val.IsValid() {
+		return rawVal("nil")
+	}
+
+	if val.CanInterface() {
+		v := val.Interface()
+		if formatter, ok := c.Formatter[val.Type()]; ok {
+			if formatter != nil {
+				res := reflect.ValueOf(formatter).Call([]reflect.Value{val})
+				return rawVal(res[0].Interface().(string))
+			}
+		} else {
+			if s, ok := v.(fmt.Stringer); ok && c.PrintStringers {
+				return stringVal(s.String())
+			}
+			if t, ok := v.(encoding.TextMarshaler); ok && c.PrintTextMarshalers {
+				if raw, err := t.MarshalText(); err == nil { // if NOT an error
+					return stringVal(string(raw))
+				}
+			}
 		}
 	}
 

@@ -15,68 +15,108 @@
 package pretty
 
 import (
+	"fmt"
+	"net"
 	"reflect"
 	"testing"
 	"time"
 )
 
 func TestVal2nodeDefault(t *testing.T) {
+	err := fmt.Errorf("err")
+	var errNil error
+
 	tests := []struct {
 		desc string
 		raw  interface{}
 		want node
 	}{
 		{
-			"nil",
-			(*int)(nil),
-			rawVal("nil"),
+			desc: "nil",
+			raw:  nil,
+			want: rawVal("nil"),
 		},
 		{
-			"string",
-			"zaphod",
-			stringVal("zaphod"),
+			desc: "nil ptr",
+			raw:  (*int)(nil),
+			want: rawVal("nil"),
 		},
 		{
-			"slice",
-			[]string{"a", "b"},
-			list{stringVal("a"), stringVal("b")},
+			desc: "nil slice",
+			raw:  []string(nil),
+			want: list{},
 		},
 		{
-			"map",
-			map[string]string{
+			desc: "nil map",
+			raw:  map[string]string(nil),
+			want: keyvals{},
+		},
+		{
+			desc: "string",
+			raw:  "zaphod",
+			want: stringVal("zaphod"),
+		},
+		{
+			desc: "slice",
+			raw:  []string{"a", "b"},
+			want: list{stringVal("a"), stringVal("b")},
+		},
+		{
+			desc: "map",
+			raw: map[string]string{
 				"zaphod": "beeblebrox",
 				"ford":   "prefect",
 			},
-			keyvals{
+			want: keyvals{
 				{"ford", stringVal("prefect")},
 				{"zaphod", stringVal("beeblebrox")},
 			},
 		},
 		{
-			"map of [2]int",
-			map[[2]int]string{
+			desc: "map of [2]int",
+			raw: map[[2]int]string{
 				[2]int{-1, 2}: "school",
 				[2]int{0, 0}:  "origin",
 				[2]int{1, 3}:  "home",
 			},
-			keyvals{
+			want: keyvals{
 				{"[-1,2]", stringVal("school")},
 				{"[0,0]", stringVal("origin")},
 				{"[1,3]", stringVal("home")},
 			},
 		},
 		{
-			"struct",
-			struct{ Zaphod, Ford string }{"beeblebrox", "prefect"},
-			keyvals{
+			desc: "struct",
+			raw:  struct{ Zaphod, Ford string }{"beeblebrox", "prefect"},
+			want: keyvals{
 				{"Zaphod", stringVal("beeblebrox")},
 				{"Ford", stringVal("prefect")},
 			},
 		},
 		{
-			"int",
-			3,
-			rawVal("3"),
+			desc: "int",
+			raw:  3,
+			want: rawVal("3"),
+		},
+		{
+			desc: "time.Time",
+			raw:  time.Unix(1257894000, 0).UTC(),
+			want: rawVal("2009-11-10 23:00:00 +0000 UTC"),
+		},
+		{
+			desc: "net.IP",
+			raw:  net.IPv4(127, 0, 0, 1),
+			want: rawVal("127.0.0.1"),
+		},
+		{
+			desc: "error",
+			raw:  &err,
+			want: rawVal("err"),
+		},
+		{
+			desc: "nil error",
+			raw:  &errNil,
+			want: rawVal("<nil>"),
 		},
 	}
 
@@ -95,41 +135,64 @@ func TestVal2node(t *testing.T) {
 		want node
 	}{
 		{
-			"struct default",
-			struct{ Zaphod, Ford, foo string }{"beeblebrox", "prefect", "BAD"},
-			DefaultConfig,
-			keyvals{
+			desc: "struct default",
+			raw:  struct{ Zaphod, Ford, foo string }{"beeblebrox", "prefect", "BAD"},
+			cfg:  DefaultConfig,
+			want: keyvals{
 				{"Zaphod", stringVal("beeblebrox")},
 				{"Ford", stringVal("prefect")},
 			},
 		},
 		{
-			"struct w/ IncludeUnexported",
-			struct{ Zaphod, Ford, foo string }{"beeblebrox", "prefect", "GOOD"},
-			&Config{
+			desc: "struct w/ IncludeUnexported",
+			raw:  struct{ Zaphod, Ford, foo string }{"beeblebrox", "prefect", "GOOD"},
+			cfg: &Config{
 				IncludeUnexported: true,
 			},
-			keyvals{
+			want: keyvals{
 				{"Zaphod", stringVal("beeblebrox")},
 				{"Ford", stringVal("prefect")},
 				{"foo", stringVal("GOOD")},
 			},
 		},
 		{
-			"time default",
-			struct{ Date time.Time }{time.Unix(1234567890, 0).UTC()},
-			DefaultConfig,
-			keyvals{
-				{"Date", keyvals{}}, // empty struct, it has unexported fields
+			desc: "time default",
+			raw:  struct{ Date time.Time }{time.Unix(1234567890, 0).UTC()},
+			cfg:  DefaultConfig,
+			want: keyvals{
+				{"Date", rawVal("2009-02-13 23:31:30 +0000 UTC")},
 			},
 		},
 		{
-			"time w/ PrintStringers",
-			struct{ Date time.Time }{time.Unix(1234567890, 0).UTC()},
-			&Config{
+			desc: "time w/ nil Formatter",
+			raw:  struct{ Date time.Time }{time.Unix(1234567890, 0).UTC()},
+			cfg: &Config{
+				PrintStringers: true,
+				Formatter: map[reflect.Type]interface{}{
+					reflect.TypeOf(time.Time{}): nil,
+				},
+			},
+			want: keyvals{
+				{"Date", keyvals{}},
+			},
+		},
+		{
+			desc: "time w/ PrintTextMarshalers",
+			raw:  struct{ Date time.Time }{time.Unix(1234567890, 0).UTC()},
+			cfg: &Config{
+				PrintTextMarshalers: true,
+			},
+			want: keyvals{
+				{"Date", stringVal("2009-02-13T23:31:30Z")},
+			},
+		},
+		{
+			desc: "time w/ PrintStringers",
+			raw:  struct{ Date time.Time }{time.Unix(1234567890, 0).UTC()},
+			cfg: &Config{
 				PrintStringers: true,
 			},
-			keyvals{
+			want: keyvals{
 				{"Date", stringVal("2009-02-13 23:31:30 +0000 UTC")},
 			},
 		},
@@ -139,5 +202,35 @@ func TestVal2node(t *testing.T) {
 		if got, want := test.cfg.val2node(reflect.ValueOf(test.raw)), test.want; !reflect.DeepEqual(got, want) {
 			t.Errorf("%s: got %#v, want %#v", test.desc, got, want)
 		}
+	}
+}
+
+func BenchmarkVal2node(b *testing.B) {
+	benchmarks := []struct {
+		desc string
+		cfg  *Config
+		raw  interface{}
+	}{
+		{
+			desc: "struct",
+			cfg:  DefaultConfig,
+			raw:  struct{ Zaphod, Ford string }{"beeblebrox", "prefect"}},
+		{
+			desc: "map",
+			cfg:  DefaultConfig,
+			raw: map[[2]int]string{
+				[2]int{-1, 2}: "school",
+				[2]int{0, 0}:  "origin",
+				[2]int{1, 3}:  "home",
+			},
+		},
+	}
+
+	for _, bench := range benchmarks {
+		b.Run(bench.desc, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				bench.cfg.val2node(reflect.ValueOf(bench.raw))
+			}
+		})
 	}
 }

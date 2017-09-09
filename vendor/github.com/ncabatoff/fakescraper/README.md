@@ -5,6 +5,7 @@ I use this when I'm writing Prometheus exporters and want to test them from the 
 Before this I would start the daemon, run curl to fetch the metrics, then kill it.  Now I simply
 do something like:
 
+```
 func main() {
 	var (
 		onceToStdout = flag.Bool("once-to-stdout", false,
@@ -25,3 +26,4 @@ func main() {
 		log.Fatalf("Unable to setup HTTP server: %v", err)
 	}
 }
+```

@@ -28,6 +28,50 @@ func TestDiff(t *testing.T) {
 		chunks []Chunk
 	}{
 		{
+			desc: "nil",
+		},
+		{
+			desc: "empty",
+			A:    []string{},
+			B:    []string{},
+		},
+		{
+			desc: "same",
+			A:    []string{"foo"},
+			B:    []string{"foo"},
+		},
+		{
+			desc: "a empty",
+			A:    []string{},
+		},
+		{
+			desc: "b empty",
+			B:    []string{},
+		},
+		{
+			desc: "b nil",
+			A:    []string{"foo"},
+			chunks: []Chunk{
+				0: {Deleted: []string{"foo"}},
+			},
+		},
+		{
+			desc: "a nil",
+			B:    []string{"foo"},
+			chunks: []Chunk{
+				0: {Added: []string{"foo"}},
+			},
+		},
+		{
+			desc: "start with change",
+			A:    []string{"a", "b", "c"},
+			B:    []string{"A", "b", "c"},
+			chunks: []Chunk{
+				0: {Deleted: []string{"a"}},
+				1: {Added: []string{"A"}, Equal: []string{"b", "c"}},
+			},
+		},
+		{
 			desc: "constitution",
 			A: []string{
 				"We the People of the United States, in Order to form a more perfect Union,",
@@ -69,23 +113,25 @@ func TestDiff(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		got := DiffChunks(test.A, test.B)
-		if got, want := len(got), len(test.chunks); got != want {
-			t.Errorf("%s: edit distance = %v, want %v", test.desc, got-1, want-1)
-			continue
-		}
-		for i := range got {
-			got, want := got[i], test.chunks[i]
-			if got, want := got.Added, want.Added; !reflect.DeepEqual(got, want) {
-				t.Errorf("%s[%d]: Added = %v, want %v", test.desc, i, got, want)
+		t.Run(test.desc, func(t *testing.T) {
+			got := DiffChunks(test.A, test.B)
+			if got, want := len(got), len(test.chunks); got != want {
+				t.Errorf("edit distance = %v, want %v", got-1, want-1)
+				return
 			}
-			if got, want := got.Deleted, want.Deleted; !reflect.DeepEqual(got, want) {
-				t.Errorf("%s[%d]: Deleted = %v, want %v", test.desc, i, got, want)
+			for i := range got {
+				got, want := got[i], test.chunks[i]
+				if got, want := got.Added, want.Added; !reflect.DeepEqual(got, want) {
+					t.Errorf("chunks[%d]: Added = %v, want %v", i, got, want)
+				}
+				if got, want := got.Deleted, want.Deleted; !reflect.DeepEqual(got, want) {
+					t.Errorf("chunks[%d]: Deleted = %v, want %v", i, got, want)
+				}
+				if got, want := got.Equal, want.Equal; !reflect.DeepEqual(got, want) {
+					t.Errorf("chunks[%d]: Equal = %v, want %v", i, got, want)
+				}
 			}
-			if got, want := got.Equal, want.Equal; !reflect.DeepEqual(got, want) {
-				t.Errorf("%s[%d]: Equal = %v, want %v", test.desc, i, got, want)
-			}
-		}
+		})
 	}
 }
 

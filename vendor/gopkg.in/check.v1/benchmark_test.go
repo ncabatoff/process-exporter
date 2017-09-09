@@ -3,8 +3,8 @@
 package check_test
 
 import (
-	. "gopkg.in/check.v1"
 	"time"
+	. "gopkg.in/check.v1"
 )
 
 var benchmarkS = Suite(&BenchmarkS{})
@@ -21,8 +21,8 @@ func (s *BenchmarkS) TestBasicTestTiming(c *C) {
 	runConf := RunConf{Output: &output, Verbose: true}
 	Run(&helper, &runConf)
 
-	expected := "PASS: check_test\\.go:[0-9]+: FixtureHelper\\.Test1\t0\\.001s\n" +
-		"PASS: check_test\\.go:[0-9]+: FixtureHelper\\.Test2\t0\\.000s\n"
+	expected := "PASS: check_test\\.go:[0-9]+: FixtureHelper\\.Test1\t0\\.0[0-9]+s\n" +
+		"PASS: check_test\\.go:[0-9]+: FixtureHelper\\.Test2\t0\\.0[0-9]+s\n"
 	c.Assert(output.value, Matches, expected)
 }
 
@@ -32,7 +32,7 @@ func (s *BenchmarkS) TestStreamTestTiming(c *C) {
 	runConf := RunConf{Output: &output, Stream: true}
 	Run(&helper, &runConf)
 
-	expected := "(?s).*\nPASS: check_test\\.go:[0-9]+: FixtureHelper\\.SetUpSuite\t *0\\.001s\n.*"
+	expected := "(?s).*\nPASS: check_test\\.go:[0-9]+: FixtureHelper\\.SetUpSuite\t[0-9]+\\.[0-9]+s\n.*"
 	c.Assert(output.value, Matches, expected)
 }
 
@@ -55,7 +55,7 @@ func (s *BenchmarkS) TestBenchmark(c *C) {
 	c.Check(helper.calls[6], Equals, "TearDownTest")
 	// ... and more.
 
-	expected := "PASS: check_test\\.go:[0-9]+: FixtureHelper\\.Benchmark1\t *100\t *[12][0-9]{5} ns/op\n"
+	expected := "PASS: check_test\\.go:[0-9]+: FixtureHelper\\.Benchmark1\t\\s+[0-9]+\t\\s+[0-9]+ ns/op\n"
 	c.Assert(output.value, Matches, expected)
 }
 
@@ -70,6 +70,22 @@ func (s *BenchmarkS) TestBenchmarkBytes(c *C) {
 	}
 	Run(&helper, &runConf)
 
-	expected := "PASS: check_test\\.go:[0-9]+: FixtureHelper\\.Benchmark2\t *100\t *[12][0-9]{5} ns/op\t *[4-9]\\.[0-9]{2} MB/s\n"
+	expected := "PASS: check_test\\.go:[0-9]+: FixtureHelper\\.Benchmark2\t\\s+[0-9]+\t\\s+[0-9]+ ns/op\t\\s+ *[1-9]\\.[0-9]{2} MB/s\n"
+	c.Assert(output.value, Matches, expected)
+}
+
+func (s *BenchmarkS) TestBenchmarkMem(c *C) {
+	helper := FixtureHelper{sleep: 100000}
+	output := String{}
+	runConf := RunConf{
+		Output:        &output,
+		Benchmark:     true,
+		BenchmarkMem:  true,
+		BenchmarkTime: 10000000,
+		Filter:        "Benchmark3",
+	}
+	Run(&helper, &runConf)
+
+	expected := "PASS: check_test\\.go:[0-9]+: FixtureHelper\\.Benchmark3\t\\s+ [0-9]+\t\\s+ *[0-9]+ ns/op\t\\s+ [0-9]+ B/op\t\\s+ [1-9]+ allocs/op\n"
 	c.Assert(output.value, Matches, expected)
 }

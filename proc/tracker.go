@@ -2,7 +2,6 @@ package proc
 
 import (
 	"fmt"
-	"os"
 	"time"
 )
 
@@ -124,7 +123,6 @@ func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, collectErrors, error) {
 			// This usually happens due to the proc having exited, i.e.
 			// we lost the race.  We don't count that as an error.
 			if err != ErrProcNotExist {
-				fmt.Fprintln(os.Stderr, "error reading metrics for ", procId, err)
 				colErrs.Read++
 			}
 			continue

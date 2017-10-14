@@ -1,8 +1,9 @@
 package proc
 
 import (
-	common "github.com/ncabatoff/process-exporter"
 	"time"
+
+	common "github.com/ncabatoff/process-exporter"
 )
 
 type (
@@ -77,10 +78,10 @@ func (g *Grouper) checkAncestry(idinfo ProcIdInfo, newprocs map[ProcId]ProcIdInf
 // Update tracks any new procs that should be according to policy, and updates
 // the metrics for already tracked procs.  Permission errors are returned as a
 // count, and will not affect the error return value.
-func (g *Grouper) Update(iter ProcIter) (int, error) {
-	newProcs, permErrs, err := g.tracker.Update(iter)
+func (g *Grouper) Update(iter ProcIter) (collectErrors, error) {
+	newProcs, colErrs, err := g.tracker.Update(iter)
 	if err != nil {
-		return permErrs, err
+		return colErrs, err
 	}
 
 	// Step 1: track any new proc that should be tracked based on its name and cmdline.
@@ -97,7 +98,7 @@ func (g *Grouper) Update(iter ProcIter) (int, error) {
 
 	// Step 2: track any untracked new proc that should be tracked because its parent is tracked.
 	if !g.trackChildren {
-		return permErrs, nil
+		return colErrs, nil
 	}
 
 	for _, idinfo := range untracked {
@@ -108,7 +109,7 @@ func (g *Grouper) Update(iter ProcIter) (int, error) {
 
 		g.checkAncestry(idinfo, untracked)
 	}
-	return permErrs, nil
+	return colErrs, nil
 }
 
 // groups returns the aggregate metrics for all groups tracked.  This reflects
@@ -126,7 +127,9 @@ func (g *Grouper) groups() GroupCountMap {
 		tstats := tinfo.GetStats()
 		cur.Memresident += tstats.Memory.Resident
 		cur.Memvirtual += tstats.Memory.Virtual
-		cur.OpenFDs += tstats.Filedesc.Open
+		if tstats.Filedesc.Open != -1 {
+			cur.OpenFDs += uint64(tstats.Filedesc.Open)
+		}
 		openratio := float64(tstats.Filedesc.Open) / float64(tstats.Filedesc.Limit)
 		if cur.WorstFDratio < openratio {
 			cur.WorstFDratio = openratio

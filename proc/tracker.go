@@ -19,7 +19,7 @@ type (
 	}
 
 	Filedesc struct {
-		Open  uint64
+		Open  int64 // -1 if we don't know
 		Limit uint64
 	}
 
@@ -54,6 +54,14 @@ type (
 		Memory
 		Filedesc
 		start time.Time
+	}
+
+	collectErrors struct {
+		// readErrors is incremented every time GetMetrics() returns an error.
+		Read int
+		// permissionErrors is incremented every time we're unable to collect
+		// some metrics (e.g. I/O) for a tracked proc.
+		Permission int
 	}
 )
 
@@ -93,10 +101,10 @@ func (t *Tracker) Ignore(id ProcId) {
 // Scan procs and update metrics for those which are tracked.  Processes that have gone
 // away get removed from the Tracked map.  New processes are returned, along with the count
 // of permission errors.
-func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, int, error) {
+func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, collectErrors, error) {
 	now := time.Now()
 	var newProcs []ProcIdInfo
-	var permissionErrors int
+	var colErrs collectErrors
 
 	for procs.Next() {
 		procId, err := procs.GetProcId()
@@ -111,33 +119,42 @@ func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, int, error) {
 			continue
 		}
 
-		// TODO if just the io file is unreadable, should we still return the other metrics?
 		metrics, err := procs.GetMetrics()
 		if err != nil {
-			if os.IsPermission(err) {
-				permissionErrors++
-				t.Ignore(procId)
+			// This usually happens due to the proc having exited, i.e.
+			// we lost the race.  We don't count that as an error.
+			if err != ErrProcNotExist {
+				fmt.Fprintln(os.Stderr, "error reading metrics for ", procId, err)
+				colErrs.Read++
 			}
 			continue
 		}
 
 		if known {
-			var newaccum, lastaccum Counts
-			dcpu := metrics.CpuTime - last.info.CpuTime
-			drbytes := metrics.ReadBytes - last.info.ReadBytes
-			dwbytes := metrics.WriteBytes - last.info.WriteBytes
-
-			lastaccum = Counts{Cpu: dcpu, ReadBytes: drbytes, WriteBytes: dwbytes}
-			newaccum = Counts{
-				Cpu:        last.accum.Cpu + lastaccum.Cpu,
-				ReadBytes:  last.accum.ReadBytes + lastaccum.ReadBytes,
-				WriteBytes: last.accum.WriteBytes + lastaccum.WriteBytes,
+			// newcounts: resource consumption since last cycle
+			newcounts := Counts{Cpu: metrics.CpuTime - last.info.CpuTime}
+			// Counts are also used in Grouper, to track aggregate usage
+			// across groups.  It would be nice to expose that we weren't
+			// able to get some metrics (e.g. due to permissions) but not nice
+			// enough to warrant an extra per-group metric.  Instead we just
+			// report 0 for proc metrics we can't get and increment the global
+			// permissionErrors counter.
+			if metrics.ReadBytes == -1 {
+				colErrs.Permission++
+			} else {
+				newcounts.ReadBytes = uint64(metrics.ReadBytes - last.info.ReadBytes)
+				newcounts.WriteBytes = uint64(metrics.WriteBytes - last.info.WriteBytes)
+			}
+			last.accum = Counts{
+				Cpu:        last.accum.Cpu + newcounts.Cpu,
+				ReadBytes:  last.accum.ReadBytes + newcounts.ReadBytes,
+				WriteBytes: last.accum.WriteBytes + newcounts.WriteBytes,
 			}
 
 			last.info.ProcMetrics = metrics
 			last.lastUpdate = now
-			last.accum = newaccum
-			last.lastaccum = lastaccum
+
+			last.lastaccum = newcounts
 		} else {
 			static, err := procs.GetStatic()
 			if err != nil {
@@ -157,7 +174,7 @@ func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, int, error) {
 	}
 	err := procs.Close()
 	if err != nil {
-		return nil, permissionErrors, fmt.Errorf("Error reading procs: %v", err)
+		return nil, colErrs, fmt.Errorf("Error reading procs: %v", err)
 	}
 
 	// Rather than allocating a new map each time to detect procs that have
@@ -176,5 +193,5 @@ func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, int, error) {
 		}
 	}
 
-	return newProcs, permissionErrors, nil
+	return newProcs, colErrs, nil
 }

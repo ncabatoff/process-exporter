@@ -1,9 +1,10 @@
 package proc
 
 import (
-	. "gopkg.in/check.v1"
 	"os"
 	"os/exec"
+
+	. "gopkg.in/check.v1"
 )
 
 var fs *FS
@@ -31,6 +32,24 @@ func (s MySuite) TestAllProcs(c *C) {
 	err := procs.Close()
 	c.Assert(err, IsNil)
 	c.Check(count, Not(Equals), 0)
+}
+
+// Verify that pid 1 doesn't provide I/O or FD stats.  This test
+// fails if pid 1 is owned by the same user running the tests.
+func (s MySuite) TestMissingIo(c *C) {
+	procs := fs.AllProcs()
+	for procs.Next() {
+		if procs.GetPid() != 1 {
+			continue
+		}
+		met, err := procs.GetMetrics()
+		c.Assert(err, IsNil)
+		c.Check(met.ReadBytes, Equals, int64(-1))
+		c.Check(met.WriteBytes, Equals, int64(-1))
+		c.Check(met.ResidentBytes, Not(Equals), 0)
+		c.Check(met.MaxFDs, Not(Equals), 0)
+		return
+	}
 }
 
 // Test that we can observe the absence of a child process before it spawns and after it exits,

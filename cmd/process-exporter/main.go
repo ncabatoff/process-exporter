@@ -116,13 +116,19 @@ var (
 
 	scrapeErrorsDesc = prometheus.NewDesc(
 		"namedprocess_scrape_errors",
-		"non-permission scrape errors",
+		"general scrape errors: no proc metrics collected during a cycle",
+		nil,
+		nil)
+
+	scrapeProcReadErrorsDesc = prometheus.NewDesc(
+		"namedprocess_scrape_procread_errors",
+		"incremented each time a proc's metrics collection fails",
 		nil,
 		nil)
 
 	scrapePermissionErrorsDesc = prometheus.NewDesc(
 		"namedprocess_scrape_permission_errors",
-		"permission scrape errors (unreadable files under /proc)",
+		"incremented each time a tracked proc's metrics collection fails partially, e.g. unreadable I/O stats",
 		nil,
 		nil)
 )
@@ -293,6 +299,7 @@ type (
 		*proc.Grouper
 		fs                     *proc.FS
 		scrapeErrors           int
+		scrapeProcReadErrors   int
 		scrapePermissionErrors int
 	}
 )
@@ -312,11 +319,12 @@ func NewProcessCollector(
 		fs:         fs,
 	}
 
-	permErrs, err := p.Update(p.fs.AllProcs())
+	colErrs, err := p.Update(p.fs.AllProcs())
 	if err != nil {
 		return nil, err
 	}
-	p.scrapePermissionErrors += permErrs
+	p.scrapePermissionErrors += colErrs.Permission
+	p.scrapeProcReadErrors += colErrs.Read
 
 	go p.start()
 
@@ -334,6 +342,7 @@ func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- worstFDRatioDesc
 	ch <- startTimeDesc
 	ch <- scrapeErrorsDesc
+	ch <- scrapeProcReadErrorsDesc
 	ch <- scrapePermissionErrorsDesc
 }
 
@@ -354,7 +363,7 @@ func (p *NamedProcessCollector) start() {
 
 func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 	permErrs, err := p.Update(p.fs.AllProcs())
-	p.scrapePermissionErrors += permErrs
+	p.scrapePermissionErrors += permErrs.Permission
 	if err != nil {
 		p.scrapeErrors++
 		log.Printf("error reading procs: %v", err)
@@ -382,6 +391,8 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 	}
 	ch <- prometheus.MustNewConstMetric(scrapeErrorsDesc,
 		prometheus.CounterValue, float64(p.scrapeErrors))
+	ch <- prometheus.MustNewConstMetric(scrapeProcReadErrorsDesc,
+		prometheus.CounterValue, float64(p.scrapeProcReadErrors))
 	ch <- prometheus.MustNewConstMetric(scrapePermissionErrorsDesc,
 		prometheus.CounterValue, float64(p.scrapePermissionErrors))
 }

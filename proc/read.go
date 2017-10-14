@@ -2,9 +2,13 @@ package proc
 
 import (
 	"fmt"
-	"github.com/prometheus/procfs"
+	"os"
 	"time"
+
+	"github.com/prometheus/procfs"
 )
+
+var ErrProcNotExist = fmt.Errorf("process does not exist")
 
 func newProcIdStatic(pid, ppid int, startTime uint64, name string, cmdline []string) ProcIdStatic {
 	return ProcIdStatic{ProcId{pid, startTime}, ProcStatic{name, cmdline, ppid, time.Time{}}}
@@ -31,11 +35,11 @@ type (
 	// ProcMetrics contains data read from /proc/pid/*
 	ProcMetrics struct {
 		CpuTime       float64
-		ReadBytes     uint64
-		WriteBytes    uint64
+		ReadBytes     int64 // -1 if unavailable
+		WriteBytes    int64 // -1 if unavailable
 		ResidentBytes uint64
 		VirtualBytes  uint64
-		OpenFDs       uint64
+		OpenFDs       int64
 		MaxFDs        uint64
 	}
 
@@ -56,21 +60,18 @@ type (
 	}
 
 	// Proc wraps the details of the underlying procfs-reading library.
+	// Any of these methods may fail if the process has disapeared.
+	// We try to return as much as possible rather than an error, e.g.
+	// if some /proc files are unreadable.
 	Proc interface {
 		// GetPid() returns the POSIX PID (process id).  They may be reused over time.
 		GetPid() int
 		// GetProcId() returns (pid,starttime), which can be considered a unique process id.
-		// It may fail if the caller doesn't have permission to read /proc/<pid>/stat, or if
-		// the process has disapeared.
 		GetProcId() (ProcId, error)
 		// GetStatic() returns various details read from files under /proc/<pid>/.  Technically
 		// name may not be static, but we'll pretend it is.
-		// It may fail if the caller doesn't have permission to read those files, or if
-		// the process has disapeared.
 		GetStatic() (ProcStatic, error)
 		// GetMetrics() returns various metrics read from files under /proc/<pid>/.
-		// It may fail if the caller doesn't have permission to read those files, or if
-		// the process has disapeared.
 		GetMetrics() (ProcMetrics, error)
 	}
 
@@ -224,10 +225,12 @@ func (p *proc) GetIo() (procfs.ProcIO, error) {
 }
 
 func (p proc) GetStatic() (ProcStatic, error) {
+	// /proc/<pid>/cmdline is normally world-readable.
 	cmdline, err := p.GetCmdLine()
 	if err != nil {
 		return ProcStatic{}, err
 	}
+	// /proc/<pid>/stat is normally world-readable.
 	stat, err := p.GetStat()
 	if err != nil {
 		return ProcStatic{}, err
@@ -244,16 +247,24 @@ func (p proc) GetStatic() (ProcStatic, error) {
 
 func (p proc) GetMetrics() (ProcMetrics, error) {
 	io, err := p.GetIo()
+	readbytes := int64(io.ReadBytes)
+	writebytes := int64(io.WriteBytes)
 	if err != nil {
-		return ProcMetrics{}, err
+		// Tolerate missing IO stats if kernel doesn't provide them,
+		// either because it wasn't built with support or due to permissions.
+		readbytes = -1
+		writebytes = -1
 	}
 	stat, err := p.GetStat()
 	if err != nil {
+		if err == os.ErrNotExist {
+			err = ErrProcNotExist
+		}
 		return ProcMetrics{}, err
 	}
 	numfds, err := p.Proc.FileDescriptorsLen()
 	if err != nil {
-		return ProcMetrics{}, err
+		numfds = -1
 	}
 	limits, err := p.NewLimits()
 	if err != nil {
@@ -261,11 +272,11 @@ func (p proc) GetMetrics() (ProcMetrics, error) {
 	}
 	return ProcMetrics{
 		CpuTime:       stat.CPUTime(),
-		ReadBytes:     io.ReadBytes,
-		WriteBytes:    io.WriteBytes,
+		ReadBytes:     readbytes,
+		WriteBytes:    writebytes,
 		ResidentBytes: uint64(stat.ResidentMemory()),
 		VirtualBytes:  uint64(stat.VirtualMemory()),
-		OpenFDs:       uint64(numfds),
+		OpenFDs:       int64(numfds),
 		MaxFDs:        uint64(limits.OpenFiles),
 	}, nil
 }

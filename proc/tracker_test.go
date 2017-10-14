@@ -92,3 +92,42 @@ func (s MySuite) TestTrackerCounts(c *C) {
 	c.Check(tr.Tracked[p1.ProcId].accum, Equals, Counts{3, 4, 5})
 	c.Check(tr.Tracked[p1.ProcId].info, DeepEquals, ProcInfo{p1.ProcStatic, p1.ProcMetrics})
 }
+
+// TestTrackerMissingIo verifies that when I/O stats are unavailable (e.g.
+// due to permissions), the accumulated I/O stats over multiple cycles
+// are always zero.
+// This test fails if pid 1 is owned by the same user running the tests.
+func (s MySuite) TestTrackerMissingIo(c *C) {
+	fs, err := NewFS("/proc")
+	c.Assert(err, IsNil)
+
+	tr := NewTracker()
+	procs := fs.AllProcs()
+	var initprocid ProcId
+	for procs.Next() {
+		procId, err := procs.GetProcId()
+		if err != nil {
+			continue
+		}
+		if procId.Pid != 1 {
+			continue
+		}
+
+		initprocid = procId
+		static, err := procs.GetStatic()
+		c.Assert(err, IsNil)
+		metrics, err := procs.GetMetrics()
+		c.Assert(err, IsNil)
+		c.Assert(metrics.ReadBytes, Equals, int64(-1))
+		tr.Track("init", ProcIdInfo{procId, static, metrics})
+		break
+	}
+	_, present := tr.Tracked[initprocid]
+	c.Assert(present, Equals, true)
+
+	tr.Update(fs.AllProcs())
+
+	// Aggregates don't carry forward the -1 for failures, they just
+	// report 0 for those procs whose stats we can't read.
+	c.Assert(tr.Tracked[initprocid].GetStats().aggregate.ReadBytes, Equals, uint64(0))
+}

@@ -7,7 +7,8 @@ import (
 
 type (
 	Counts struct {
-		Cpu        float64
+		CpuUser    float64
+		CpuSystem  float64
 		ReadBytes  uint64
 		WriteBytes uint64
 	}
@@ -130,7 +131,10 @@ func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, collectErrors, error) {
 
 		if known {
 			// newcounts: resource consumption since last cycle
-			newcounts := Counts{Cpu: metrics.CpuTime - last.info.CpuTime}
+			newcounts := Counts{
+				CpuUser:   metrics.CpuUserTime - last.info.CpuUserTime,
+				CpuSystem: metrics.CpuSystemTime - last.info.CpuSystemTime,
+			}
 			// Counts are also used in Grouper, to track aggregate usage
 			// across groups.  It would be nice to expose that we weren't
 			// able to get some metrics (e.g. due to permissions) but not nice
@@ -144,7 +148,8 @@ func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, collectErrors, error) {
 				newcounts.WriteBytes = uint64(metrics.WriteBytes - last.info.WriteBytes)
 			}
 			last.accum = Counts{
-				Cpu:        last.accum.Cpu + newcounts.Cpu,
+				CpuUser:    last.accum.CpuUser + newcounts.CpuUser,
+				CpuSystem:  last.accum.CpuSystem + newcounts.CpuSystem,
 				ReadBytes:  last.accum.ReadBytes + newcounts.ReadBytes,
 				WriteBytes: last.accum.WriteBytes + newcounts.WriteBytes,
 			}

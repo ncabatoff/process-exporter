@@ -60,7 +60,7 @@ func (s MySuite) TestTrackerCounts(c *C) {
 	tr := NewTracker()
 
 	// Test that p1 is seen as new
-	p1 := newProc(1, 1, "p1", ProcMetrics{1, 2, 3, 4, 5, 6, 4096})
+	p1 := newProc(1, 1, "p1", ProcMetrics{1, 1.5, 2, 3, 4, 5, 6, 4096})
 	want1 := []ProcIdInfo{p1}
 	got1, _, err := tr.Update(procInfoIter(p1))
 	c.Assert(err, IsNil)
@@ -73,23 +73,23 @@ func (s MySuite) TestTrackerCounts(c *C) {
 	c.Check(got2, DeepEquals, []ProcIdInfo(nil))
 
 	// Now update p1's metrics
-	p1.ProcMetrics = ProcMetrics{2, 3, 4, 5, 6, 7, 4096}
+	p1.ProcMetrics = ProcMetrics{2, 2.5, 3, 4, 5, 6, 7, 4096}
 	got3, _, err := tr.Update(procInfoIter(p1))
 	c.Assert(err, IsNil)
 	c.Check(got3, DeepEquals, []ProcIdInfo(nil))
 
 	// Test that counts are correct
-	c.Check(tr.Tracked[p1.ProcId].accum, Equals, Counts{1, 1, 1})
+	c.Check(tr.Tracked[p1.ProcId].accum, Equals, Counts{1, 1, 1, 1})
 	c.Check(tr.Tracked[p1.ProcId].info, DeepEquals, ProcInfo{p1.ProcStatic, p1.ProcMetrics})
 
 	// Now update p1's metrics again
-	p1.ProcMetrics = ProcMetrics{4, 6, 8, 9, 10, 11, 4096}
+	p1.ProcMetrics = ProcMetrics{4, 5, 6, 8, 9, 10, 11, 4096}
 	got4, _, err := tr.Update(procInfoIter(p1))
 	c.Assert(err, IsNil)
 	c.Check(got4, DeepEquals, []ProcIdInfo(nil))
 
 	// Test that counts are correct
-	c.Check(tr.Tracked[p1.ProcId].accum, Equals, Counts{3, 4, 5})
+	c.Check(tr.Tracked[p1.ProcId].accum, Equals, Counts{3, 3.5, 4, 5})
 	c.Check(tr.Tracked[p1.ProcId].info, DeepEquals, ProcInfo{p1.ProcStatic, p1.ProcMetrics})
 }
 

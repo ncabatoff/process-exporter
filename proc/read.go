@@ -34,7 +34,8 @@ type (
 
 	// ProcMetrics contains data read from /proc/pid/*
 	ProcMetrics struct {
-		CpuTime       float64
+		CpuUserTime   float64
+		CpuSystemTime float64
 		ReadBytes     int64 // -1 if unavailable
 		WriteBytes    int64 // -1 if unavailable
 		ResidentBytes uint64
@@ -271,7 +272,8 @@ func (p proc) GetMetrics() (ProcMetrics, error) {
 		return ProcMetrics{}, err
 	}
 	return ProcMetrics{
-		CpuTime:       stat.CPUTime(),
+		CpuUserTime:   float64(stat.UTime) / userHZ,
+		CpuSystemTime: float64(stat.STime) / userHZ,
 		ReadBytes:     readbytes,
 		WriteBytes:    writebytes,
 		ResidentBytes: uint64(stat.ResidentMemory()),

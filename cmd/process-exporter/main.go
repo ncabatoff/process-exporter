@@ -72,9 +72,15 @@ var (
 		[]string{"groupname"},
 		nil)
 
-	cpuSecsDesc = prometheus.NewDesc(
-		"namedprocess_namegroup_cpu_seconds_total",
-		"Cpu usage in seconds",
+	cpuUserSecsDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_cpu_user_seconds_total",
+		"Cpu user usage in seconds",
+		[]string{"groupname"},
+		nil)
+
+	cpuSystemSecsDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_cpu_system_seconds_total",
+		"Cpu system usage in seconds",
 		[]string{"groupname"},
 		nil)
 
@@ -333,7 +339,8 @@ func NewProcessCollector(
 
 // Describe implements prometheus.Collector.
 func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
-	ch <- cpuSecsDesc
+	ch <- cpuUserSecsDesc
+	ch <- cpuSystemSecsDesc
 	ch <- numprocsDesc
 	ch <- readBytesDesc
 	ch <- writeBytesDesc
@@ -381,8 +388,10 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 				prometheus.GaugeValue, float64(gcounts.OpenFDs), gname)
 			ch <- prometheus.MustNewConstMetric(worstFDRatioDesc,
 				prometheus.GaugeValue, float64(gcounts.WorstFDratio), gname)
-			ch <- prometheus.MustNewConstMetric(cpuSecsDesc,
-				prometheus.CounterValue, gcounts.Cpu, gname)
+			ch <- prometheus.MustNewConstMetric(cpuUserSecsDesc,
+				prometheus.CounterValue, gcounts.CpuUser, gname)
+			ch <- prometheus.MustNewConstMetric(cpuSystemSecsDesc,
+				prometheus.CounterValue, gcounts.CpuSystem, gname)
 			ch <- prometheus.MustNewConstMetric(readBytesDesc,
 				prometheus.CounterValue, float64(gcounts.ReadBytes), gname)
 			ch <- prometheus.MustNewConstMetric(writeBytesDesc,

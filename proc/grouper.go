@@ -134,7 +134,8 @@ func (g *Grouper) groups() GroupCountMap {
 		if cur.WorstFDratio < openratio {
 			cur.WorstFDratio = openratio
 		}
-		cur.Counts.Cpu += tstats.latest.Cpu
+		cur.Counts.CpuUser += tstats.latest.CpuUser
+		cur.Counts.CpuSystem += tstats.latest.CpuSystem
 		cur.Counts.ReadBytes += tstats.latest.ReadBytes
 		cur.Counts.WriteBytes += tstats.latest.WriteBytes
 		if cur.OldestStartTime == zeroTime || tstats.start.Before(cur.OldestStartTime) {
@@ -157,7 +158,8 @@ func (g *Grouper) Groups() GroupCountMap {
 	// and update the accumulators.
 	for gname, group := range groups {
 		if oldcounts, ok := g.GroupStats[gname]; ok {
-			group.Counts.Cpu += oldcounts.Cpu
+			group.Counts.CpuUser += oldcounts.CpuUser
+			group.Counts.CpuSystem += oldcounts.CpuSystem
 			group.Counts.ReadBytes += oldcounts.ReadBytes
 			group.Counts.WriteBytes += oldcounts.WriteBytes
 		}

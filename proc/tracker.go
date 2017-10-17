@@ -7,10 +7,12 @@ import (
 
 type (
 	Counts struct {
-		CpuUser    float64
-		CpuSystem  float64
-		ReadBytes  uint64
-		WriteBytes uint64
+		CpuUser         float64
+		CpuSystem       float64
+		ReadBytes       uint64
+		WriteBytes      uint64
+		MajorPageFaults uint64
+		MinorPageFaults uint64
 	}
 
 	Memory struct {
@@ -132,8 +134,10 @@ func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, collectErrors, error) {
 		if known {
 			// newcounts: resource consumption since last cycle
 			newcounts := Counts{
-				CpuUser:   metrics.CpuUserTime - last.info.CpuUserTime,
-				CpuSystem: metrics.CpuSystemTime - last.info.CpuSystemTime,
+				CpuUser:         metrics.CpuUserTime - last.info.CpuUserTime,
+				CpuSystem:       metrics.CpuSystemTime - last.info.CpuSystemTime,
+				MajorPageFaults: metrics.MajorPageFaults - last.info.MajorPageFaults,
+				MinorPageFaults: metrics.MinorPageFaults - last.info.MinorPageFaults,
 			}
 			// Counts are also used in Grouper, to track aggregate usage
 			// across groups.  It would be nice to expose that we weren't
@@ -148,10 +152,12 @@ func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, collectErrors, error) {
 				newcounts.WriteBytes = uint64(metrics.WriteBytes - last.info.WriteBytes)
 			}
 			last.accum = Counts{
-				CpuUser:    last.accum.CpuUser + newcounts.CpuUser,
-				CpuSystem:  last.accum.CpuSystem + newcounts.CpuSystem,
-				ReadBytes:  last.accum.ReadBytes + newcounts.ReadBytes,
-				WriteBytes: last.accum.WriteBytes + newcounts.WriteBytes,
+				CpuUser:         last.accum.CpuUser + newcounts.CpuUser,
+				CpuSystem:       last.accum.CpuSystem + newcounts.CpuSystem,
+				ReadBytes:       last.accum.ReadBytes + newcounts.ReadBytes,
+				WriteBytes:      last.accum.WriteBytes + newcounts.WriteBytes,
+				MajorPageFaults: last.accum.MajorPageFaults + newcounts.MajorPageFaults,
+				MinorPageFaults: last.accum.MinorPageFaults + newcounts.MinorPageFaults,
 			}
 
 			last.info.ProcMetrics = metrics

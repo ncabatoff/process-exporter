@@ -138,6 +138,8 @@ func (g *Grouper) groups() GroupCountMap {
 		cur.Counts.CpuSystem += tstats.latest.CpuSystem
 		cur.Counts.ReadBytes += tstats.latest.ReadBytes
 		cur.Counts.WriteBytes += tstats.latest.WriteBytes
+		cur.Counts.MajorPageFaults += tstats.latest.MajorPageFaults
+		cur.Counts.MinorPageFaults += tstats.latest.MinorPageFaults
 		if cur.OldestStartTime == zeroTime || tstats.start.Before(cur.OldestStartTime) {
 			cur.OldestStartTime = tstats.start
 		}
@@ -162,6 +164,8 @@ func (g *Grouper) Groups() GroupCountMap {
 			group.Counts.CpuSystem += oldcounts.CpuSystem
 			group.Counts.ReadBytes += oldcounts.ReadBytes
 			group.Counts.WriteBytes += oldcounts.WriteBytes
+			group.Counts.MajorPageFaults += oldcounts.MajorPageFaults
+			group.Counts.MinorPageFaults += oldcounts.MinorPageFaults
 		}
 		g.GroupStats[gname] = group.Counts
 		groups[gname] = group

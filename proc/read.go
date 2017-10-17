@@ -34,14 +34,16 @@ type (
 
 	// ProcMetrics contains data read from /proc/pid/*
 	ProcMetrics struct {
-		CpuUserTime   float64
-		CpuSystemTime float64
-		ReadBytes     int64 // -1 if unavailable
-		WriteBytes    int64 // -1 if unavailable
-		ResidentBytes uint64
-		VirtualBytes  uint64
-		OpenFDs       int64
-		MaxFDs        uint64
+		CpuUserTime     float64
+		CpuSystemTime   float64
+		ReadBytes       int64 // -1 if unavailable
+		WriteBytes      int64 // -1 if unavailable
+		ResidentBytes   uint64
+		VirtualBytes    uint64
+		OpenFDs         int64 // -1 if unavailable
+		MaxFDs          uint64
+		MajorPageFaults uint64
+		MinorPageFaults uint64
 	}
 
 	ProcIdStatic struct {
@@ -272,14 +274,16 @@ func (p proc) GetMetrics() (ProcMetrics, error) {
 		return ProcMetrics{}, err
 	}
 	return ProcMetrics{
-		CpuUserTime:   float64(stat.UTime) / userHZ,
-		CpuSystemTime: float64(stat.STime) / userHZ,
-		ReadBytes:     readbytes,
-		WriteBytes:    writebytes,
-		ResidentBytes: uint64(stat.ResidentMemory()),
-		VirtualBytes:  uint64(stat.VirtualMemory()),
-		OpenFDs:       int64(numfds),
-		MaxFDs:        uint64(limits.OpenFiles),
+		CpuUserTime:     float64(stat.UTime) / userHZ,
+		CpuSystemTime:   float64(stat.STime) / userHZ,
+		ReadBytes:       readbytes,
+		WriteBytes:      writebytes,
+		ResidentBytes:   uint64(stat.ResidentMemory()),
+		VirtualBytes:    uint64(stat.VirtualMemory()),
+		OpenFDs:         int64(numfds),
+		MaxFDs:          uint64(limits.OpenFiles),
+		MajorPageFaults: uint64(stat.MajFlt),
+		MinorPageFaults: uint64(stat.MinFlt),
 	}, nil
 }
 

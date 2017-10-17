@@ -120,6 +120,18 @@ var (
 		[]string{"groupname"},
 		nil)
 
+	majorPageFaultsDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_major_page_faults_total",
+		"Major page faults",
+		[]string{"groupname"},
+		nil)
+
+	minorPageFaultsDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_minor_page_faults_total",
+		"Minor page faults",
+		[]string{"groupname"},
+		nil)
+
 	scrapeErrorsDesc = prometheus.NewDesc(
 		"namedprocess_scrape_errors",
 		"general scrape errors: no proc metrics collected during a cycle",
@@ -348,6 +360,8 @@ func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- openFDsDesc
 	ch <- worstFDRatioDesc
 	ch <- startTimeDesc
+	ch <- majorPageFaultsDesc
+	ch <- minorPageFaultsDesc
 	ch <- scrapeErrorsDesc
 	ch <- scrapeProcReadErrorsDesc
 	ch <- scrapePermissionErrorsDesc
@@ -396,6 +410,10 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 				prometheus.CounterValue, float64(gcounts.ReadBytes), gname)
 			ch <- prometheus.MustNewConstMetric(writeBytesDesc,
 				prometheus.CounterValue, float64(gcounts.WriteBytes), gname)
+			ch <- prometheus.MustNewConstMetric(majorPageFaultsDesc,
+				prometheus.CounterValue, float64(gcounts.MajorPageFaults), gname)
+			ch <- prometheus.MustNewConstMetric(minorPageFaultsDesc,
+				prometheus.CounterValue, float64(gcounts.MinorPageFaults), gname)
 		}
 	}
 	ch <- prometheus.MustNewConstMetric(scrapeErrorsDesc,

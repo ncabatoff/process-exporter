@@ -55,7 +55,8 @@ type (
 		aggregate, latest Counts
 		Memory
 		Filedesc
-		start time.Time
+		start      time.Time
+		numThreads uint64
 	}
 
 	collectErrors struct {
@@ -79,11 +80,12 @@ func (tp *TrackedProc) GetStats() trackedStats {
 	mem := Memory{Resident: tp.info.ResidentBytes, Virtual: tp.info.VirtualBytes}
 	fd := Filedesc{Open: tp.info.OpenFDs, Limit: tp.info.MaxFDs}
 	return trackedStats{
-		aggregate: tp.accum,
-		latest:    tp.lastaccum,
-		Memory:    mem,
-		Filedesc:  fd,
-		start:     tp.info.StartTime,
+		aggregate:  tp.accum,
+		latest:     tp.lastaccum,
+		Memory:     mem,
+		Filedesc:   fd,
+		start:      tp.info.StartTime,
+		numThreads: tp.info.NumThreads,
 	}
 }
 

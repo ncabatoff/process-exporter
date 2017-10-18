@@ -44,6 +44,7 @@ type (
 		MaxFDs          uint64
 		MajorPageFaults uint64
 		MinorPageFaults uint64
+		NumThreads      uint64
 	}
 
 	ProcIdStatic struct {
@@ -284,6 +285,7 @@ func (p proc) GetMetrics() (ProcMetrics, error) {
 		MaxFDs:          uint64(limits.OpenFiles),
 		MajorPageFaults: uint64(stat.MajFlt),
 		MinorPageFaults: uint64(stat.MinFlt),
+		NumThreads:      uint64(stat.NumThreads),
 	}, nil
 }
 

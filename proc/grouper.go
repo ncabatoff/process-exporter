@@ -25,6 +25,7 @@ type (
 		OldestStartTime time.Time
 		OpenFDs         uint64
 		WorstFDratio    float64
+		NumThreads      uint64
 	}
 )
 
@@ -134,6 +135,7 @@ func (g *Grouper) groups() GroupCountMap {
 		if cur.WorstFDratio < openratio {
 			cur.WorstFDratio = openratio
 		}
+		cur.NumThreads += tstats.numThreads
 		cur.Counts.CpuUser += tstats.latest.CpuUser
 		cur.Counts.CpuSystem += tstats.latest.CpuSystem
 		cur.Counts.ReadBytes += tstats.latest.ReadBytes

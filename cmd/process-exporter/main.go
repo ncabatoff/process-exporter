@@ -126,6 +126,12 @@ var (
 		[]string{"groupname"},
 		nil)
 
+	numThreadsDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_num_threads",
+		"Number of threads",
+		[]string{"groupname"},
+		nil)
+
 	minorPageFaultsDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_minor_page_faults_total",
 		"Minor page faults",
@@ -362,6 +368,7 @@ func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- startTimeDesc
 	ch <- majorPageFaultsDesc
 	ch <- minorPageFaultsDesc
+	ch <- numThreadsDesc
 	ch <- scrapeErrorsDesc
 	ch <- scrapeProcReadErrorsDesc
 	ch <- scrapePermissionErrorsDesc
@@ -414,6 +421,8 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 				prometheus.CounterValue, float64(gcounts.MajorPageFaults), gname)
 			ch <- prometheus.MustNewConstMetric(minorPageFaultsDesc,
 				prometheus.CounterValue, float64(gcounts.MinorPageFaults), gname)
+			ch <- prometheus.MustNewConstMetric(numThreadsDesc,
+				prometheus.GaugeValue, float64(gcounts.NumThreads), gname)
 		}
 	}
 	ch <- prometheus.MustNewConstMetric(scrapeErrorsDesc,

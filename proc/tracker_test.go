@@ -15,31 +15,31 @@ func (s MySuite) TestTrackerBasic(c *C) {
 			ProcMetrics: ProcMetrics{},
 		}
 	}
-	tr := NewTracker()
+	tr := NewTracker(false)
 
 	// Test that p1 is seen as new
 	p1 := newProc(1, 1, "p1")
 	want1 := []ProcIdInfo{p1}
-	got1, _, err := tr.Update(procInfoIter(want1...))
+	got1, _, err := tr.update(procInfoIter(want1...))
 	c.Assert(err, IsNil)
 	c.Check(got1, DeepEquals, want1)
 
 	// Test that p1 is no longer seen as new once tracked
 	tr.Track("g1", p1)
-	got2, _, err := tr.Update(procInfoIter(want1...))
+	got2, _, err := tr.update(procInfoIter(want1...))
 	c.Assert(err, IsNil)
 	c.Check(got2, DeepEquals, []ProcIdInfo(nil))
 
 	// Test that p2 is new now, but p1 is still not
 	p2 := newProc(2, 2, "p2")
 	want2 := []ProcIdInfo{p2}
-	got3, _, err := tr.Update(procInfoIter(p1, p2))
+	got3, _, err := tr.update(procInfoIter(p1, p2))
 	c.Assert(err, IsNil)
 	c.Check(got3, DeepEquals, want2)
 
 	// Test that p2 stops being new once ignored
 	tr.Ignore(p2.ProcId)
-	got4, _, err := tr.Update(procInfoIter(p1, p2))
+	got4, _, err := tr.update(procInfoIter(p1, p2))
 	c.Assert(err, IsNil)
 	c.Check(got4, DeepEquals, []ProcIdInfo(nil))
 
@@ -57,24 +57,24 @@ func (s MySuite) TestTrackerCounts(c *C) {
 			ProcMetrics: m,
 		}
 	}
-	tr := NewTracker()
+	tr := NewTracker(false)
 
 	// Test that p1 is seen as new
 	p1 := newProc(1, 1, "p1", ProcMetrics{1, 1.5, 2, 3, 4, 5, 6, 4096, 7, 8, 2})
 	want1 := []ProcIdInfo{p1}
-	got1, _, err := tr.Update(procInfoIter(p1))
+	got1, _, err := tr.update(procInfoIter(p1))
 	c.Assert(err, IsNil)
 	c.Check(got1, DeepEquals, want1)
 
 	// Test that p1 is no longer seen as new once tracked
 	tr.Track("g1", p1)
-	got2, _, err := tr.Update(procInfoIter(p1))
+	got2, _, err := tr.update(procInfoIter(p1))
 	c.Assert(err, IsNil)
 	c.Check(got2, DeepEquals, []ProcIdInfo(nil))
 
 	// Now update p1's metrics
 	p1.ProcMetrics = ProcMetrics{2, 2.5, 3, 4, 5, 6, 7, 4096, 8, 9, 2}
-	got3, _, err := tr.Update(procInfoIter(p1))
+	got3, _, err := tr.update(procInfoIter(p1))
 	c.Assert(err, IsNil)
 	c.Check(got3, DeepEquals, []ProcIdInfo(nil))
 
@@ -84,7 +84,7 @@ func (s MySuite) TestTrackerCounts(c *C) {
 
 	// Now update p1's metrics again
 	p1.ProcMetrics = ProcMetrics{4, 5, 6, 8, 9, 10, 11, 4096, 12, 13, 2}
-	got4, _, err := tr.Update(procInfoIter(p1))
+	got4, _, err := tr.update(procInfoIter(p1))
 	c.Assert(err, IsNil)
 	c.Check(got4, DeepEquals, []ProcIdInfo(nil))
 
@@ -101,7 +101,7 @@ func (s MySuite) TestTrackerMissingIo(c *C) {
 	fs, err := NewFS("/proc")
 	c.Assert(err, IsNil)
 
-	tr := NewTracker()
+	tr := NewTracker(false)
 	procs := fs.AllProcs()
 	var initprocid ProcId
 	for procs.Next() {
@@ -125,7 +125,7 @@ func (s MySuite) TestTrackerMissingIo(c *C) {
 	_, present := tr.Tracked[initprocid]
 	c.Assert(present, Equals, true)
 
-	tr.Update(fs.AllProcs())
+	tr.update(fs.AllProcs())
 
 	// Aggregates don't carry forward the -1 for failures, they just
 	// report 0 for those procs whose stats we can't read.

@@ -3,6 +3,8 @@ package proc
 import (
 	"fmt"
 	"time"
+
+	common "github.com/ncabatoff/process-exporter"
 )
 
 type (
@@ -31,9 +33,10 @@ type (
 		// may be blacklisted such that they no longer get tracked by
 		// setting their value in the Tracked map to nil.
 		Tracked map[ProcId]*TrackedProc
-		// ProcIds is a map from pid to ProcId.  This is a convenience
+		// procIds is a map from pid to ProcId.  This is a convenience
 		// to allow finding the Tracked entry of a parent process.
-		ProcIds map[int]ProcId
+		procIds       map[int]ProcId
+		trackChildren bool
 	}
 
 	// TrackedProc accumulates metrics for a process, as well as
@@ -68,6 +71,15 @@ type (
 	}
 )
 
+func (c *Counts) Add(c2 Counts) {
+	c.CpuUser += c2.CpuUser
+	c.CpuSystem += c2.CpuSystem
+	c.ReadBytes += c2.ReadBytes
+	c.WriteBytes += c2.WriteBytes
+	c.MajorPageFaults += c2.MajorPageFaults
+	c.MinorPageFaults += c2.MinorPageFaults
+}
+
 func (tp *TrackedProc) GetName() string {
 	return tp.info.Name
 }
@@ -89,8 +101,12 @@ func (tp *TrackedProc) GetStats() trackedStats {
 	}
 }
 
-func NewTracker() *Tracker {
-	return &Tracker{Tracked: make(map[ProcId]*TrackedProc), ProcIds: make(map[int]ProcId)}
+func NewTracker(trackChildren bool) *Tracker {
+	return &Tracker{
+		Tracked:       make(map[ProcId]*TrackedProc),
+		procIds:       make(map[int]ProcId),
+		trackChildren: trackChildren,
+	}
 }
 
 func (t *Tracker) Track(groupName string, idinfo ProcIdInfo) {
@@ -102,87 +118,99 @@ func (t *Tracker) Ignore(id ProcId) {
 	t.Tracked[id] = nil
 }
 
-// Scan procs and update metrics for those which are tracked.  Processes that have gone
-// away get removed from the Tracked map.  New processes are returned, along with the count
-// of permission errors.
-func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, collectErrors, error) {
-	now := time.Now()
+func updateProc(metrics ProcMetrics, tproc *TrackedProc, updateTime time.Time, cerrs *collectErrors) {
+	// newcounts: resource consumption since last cycle
+	newcounts := Counts{
+		CpuUser:         metrics.CpuUserTime - tproc.info.CpuUserTime,
+		CpuSystem:       metrics.CpuSystemTime - tproc.info.CpuSystemTime,
+		MajorPageFaults: metrics.MajorPageFaults - tproc.info.MajorPageFaults,
+		MinorPageFaults: metrics.MinorPageFaults - tproc.info.MinorPageFaults,
+	}
+	// Counts are also used in Grouper, to track aggregate usage
+	// across groups.  It would be nice to expose that we weren't
+	// able to get some metrics (e.g. due to permissions) but not nice
+	// enough to warrant an extra per-group metric.  Instead we just
+	// report 0 for proc metrics we can't get and increment the global
+	// permissionErrors counter.
+	if metrics.ReadBytes == -1 {
+		cerrs.Permission++
+	} else {
+		newcounts.ReadBytes = uint64(metrics.ReadBytes - tproc.info.ReadBytes)
+		newcounts.WriteBytes = uint64(metrics.WriteBytes - tproc.info.WriteBytes)
+	}
+	tproc.accum.Add(newcounts)
+	tproc.info.ProcMetrics = metrics
+	tproc.lastUpdate = updateTime
+	tproc.lastaccum = newcounts
+}
+
+// handleProc updates the tracker if it's a known and not ignored proc.
+// If it's neither known nor ignored, newProc will be non-nil.
+// It is not an error if the process disappears while we are reading
+// its info out of /proc, it just means nothing will be returned and
+// the tracker will be unchanged.
+func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*ProcIdInfo, collectErrors) {
+	var cerrs collectErrors
+	procId, err := proc.GetProcId()
+	if err != nil {
+		return nil, cerrs
+	}
+
+	// Do nothing if we're ignoring this proc.
+	last, known := t.Tracked[procId]
+	if known && last == nil {
+		return nil, cerrs
+	}
+
+	metrics, err := proc.GetMetrics()
+	if err != nil {
+		// This usually happens due to the proc having exited, i.e.
+		// we lost the race.  We don't count that as an error.
+		// If GetMetrics returns
+		if err != ErrProcNotExist {
+			cerrs.Read++
+		}
+		return nil, cerrs
+	}
+
+	var newProc *ProcIdInfo
+	if known {
+		updateProc(metrics, last, updateTime, &cerrs)
+	} else {
+		static, err := proc.GetStatic()
+		if err != nil {
+			return nil, cerrs
+		}
+		newProc = &ProcIdInfo{procId, static, metrics}
+
+		// Is this a new process with the same pid as one we already know?
+		// Then delete it from the known map, otherwise the cleanup in Update()
+		// will remove the ProcIds entry we're creating here.
+		if oldProcId, ok := t.procIds[procId.Pid]; ok {
+			delete(t.Tracked, oldProcId)
+		}
+		t.procIds[procId.Pid] = procId
+	}
+	return newProc, cerrs
+}
+
+// update scans procs and updates metrics for those which are tracked. Processes
+// that have gone away get removed from the Tracked map. New processes are
+// returned, along with the count of permission errors.
+func (t *Tracker) update(procs ProcIter) ([]ProcIdInfo, collectErrors, error) {
 	var newProcs []ProcIdInfo
 	var colErrs collectErrors
+	var now = time.Now()
 
 	for procs.Next() {
-		procId, err := procs.GetProcId()
-		if err != nil {
-			continue
+		newProc, cerrs := t.handleProc(procs, now)
+		if newProc != nil {
+			newProcs = append(newProcs, *newProc)
 		}
-
-		last, known := t.Tracked[procId]
-
-		// Are we ignoring this proc?
-		if known && last == nil {
-			continue
-		}
-
-		metrics, err := procs.GetMetrics()
-		if err != nil {
-			// This usually happens due to the proc having exited, i.e.
-			// we lost the race.  We don't count that as an error.
-			if err != ErrProcNotExist {
-				colErrs.Read++
-			}
-			continue
-		}
-
-		if known {
-			// newcounts: resource consumption since last cycle
-			newcounts := Counts{
-				CpuUser:         metrics.CpuUserTime - last.info.CpuUserTime,
-				CpuSystem:       metrics.CpuSystemTime - last.info.CpuSystemTime,
-				MajorPageFaults: metrics.MajorPageFaults - last.info.MajorPageFaults,
-				MinorPageFaults: metrics.MinorPageFaults - last.info.MinorPageFaults,
-			}
-			// Counts are also used in Grouper, to track aggregate usage
-			// across groups.  It would be nice to expose that we weren't
-			// able to get some metrics (e.g. due to permissions) but not nice
-			// enough to warrant an extra per-group metric.  Instead we just
-			// report 0 for proc metrics we can't get and increment the global
-			// permissionErrors counter.
-			if metrics.ReadBytes == -1 {
-				colErrs.Permission++
-			} else {
-				newcounts.ReadBytes = uint64(metrics.ReadBytes - last.info.ReadBytes)
-				newcounts.WriteBytes = uint64(metrics.WriteBytes - last.info.WriteBytes)
-			}
-			last.accum = Counts{
-				CpuUser:         last.accum.CpuUser + newcounts.CpuUser,
-				CpuSystem:       last.accum.CpuSystem + newcounts.CpuSystem,
-				ReadBytes:       last.accum.ReadBytes + newcounts.ReadBytes,
-				WriteBytes:      last.accum.WriteBytes + newcounts.WriteBytes,
-				MajorPageFaults: last.accum.MajorPageFaults + newcounts.MajorPageFaults,
-				MinorPageFaults: last.accum.MinorPageFaults + newcounts.MinorPageFaults,
-			}
-
-			last.info.ProcMetrics = metrics
-			last.lastUpdate = now
-
-			last.lastaccum = newcounts
-		} else {
-			static, err := procs.GetStatic()
-			if err != nil {
-				continue
-			}
-			newProcs = append(newProcs, ProcIdInfo{procId, static, metrics})
-
-			// Is this a new process with the same pid as one we already know?
-			if oldProcId, ok := t.ProcIds[procId.Pid]; ok {
-				// Delete it from known, otherwise the cleanup below will remove the
-				// ProcIds entry we're about to create
-				delete(t.Tracked, oldProcId)
-			}
-			t.ProcIds[procId.Pid] = procId
-		}
-
+		colErrs.Read += cerrs.Read
+		colErrs.Permission += cerrs.Permission
 	}
+
 	err := procs.Close()
 	if err != nil {
 		return nil, colErrs, fmt.Errorf("Error reading procs: %v", err)
@@ -200,9 +228,87 @@ func (t *Tracker) Update(procs ProcIter) ([]ProcIdInfo, collectErrors, error) {
 		}
 		if pinfo.lastUpdate != now {
 			delete(t.Tracked, procId)
-			delete(t.ProcIds, procId.Pid)
+			delete(t.procIds, procId.Pid)
 		}
 	}
 
 	return newProcs, colErrs, nil
+}
+
+// checkAncestry walks the process tree recursively towards the root,
+// stopping at pid 1 or upon finding a parent that's already tracked
+// or ignored.  If we find a tracked parent track this one too; if not,
+// ignore this one.
+func (t *Tracker) checkAncestry(idinfo ProcIdInfo, newprocs map[ProcId]ProcIdInfo) string {
+	ppid := idinfo.ParentPid
+	pProcId := t.procIds[ppid]
+	if pProcId.Pid < 1 {
+		// Reached root of process tree without finding a tracked parent.
+		t.Ignore(idinfo.ProcId)
+		return ""
+	}
+
+	// Is the parent already known to the tracker?
+	if ptproc, ok := t.Tracked[pProcId]; ok {
+		if ptproc != nil {
+			// We've found a tracked parent.
+			t.Track(ptproc.GroupName, idinfo)
+			return ptproc.GroupName
+		} else {
+			// We've found an untracked parent.
+			t.Ignore(idinfo.ProcId)
+			return ""
+		}
+	}
+
+	// Is the parent another new process?
+	if pinfoid, ok := newprocs[pProcId]; ok {
+		if name := t.checkAncestry(pinfoid, newprocs); name != "" {
+			// We've found a tracked parent, which implies this entire lineage should be tracked.
+			t.Track(name, idinfo)
+			return name
+		}
+	}
+
+	// Parent is dead, i.e. we never saw it, or there's no tracked proc in our ancestry.
+	t.Ignore(idinfo.ProcId)
+	return ""
+}
+
+// Update tracks any new procs that should be according to policy, and updates
+// the metrics for already tracked procs.  Permission errors are returned as a
+// count, and will not affect the error return value.
+func (t *Tracker) Update(iter ProcIter, namer common.MatchNamer) (collectErrors, error) {
+	newProcs, colErrs, err := t.update(iter)
+	if err != nil {
+		return colErrs, err
+	}
+
+	// Step 1: track any new proc that should be tracked based on its name and cmdline.
+	untracked := make(map[ProcId]ProcIdInfo)
+	for _, idinfo := range newProcs {
+		nacl := common.NameAndCmdline{Name: idinfo.Name, Cmdline: idinfo.Cmdline}
+		wanted, gname := namer.MatchAndName(nacl)
+		if !wanted {
+			untracked[idinfo.ProcId] = idinfo
+			continue
+		}
+
+		t.Track(gname, idinfo)
+	}
+
+	// Step 2: track any untracked new proc that should be tracked because its parent is tracked.
+	if !t.trackChildren {
+		return colErrs, nil
+	}
+
+	for _, idinfo := range untracked {
+		if _, ok := t.Tracked[idinfo.ProcId]; ok {
+			// Already tracked or ignored in an earlier iteration
+			continue
+		}
+
+		t.checkAncestry(idinfo, untracked)
+	}
+	return colErrs, nil
 }

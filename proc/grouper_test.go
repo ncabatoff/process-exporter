@@ -44,7 +44,7 @@ func (s MySuite) TestGrouperBasic(c *C) {
 	_, err := gr.Update(procInfoIter(p1, p2, p3))
 	c.Assert(err, IsNil)
 
-	got1 := gr.groups()
+	got1 := gr.curgroups()
 	want1 := GroupCountMap{
 		"g1": GroupCounts{Counts{0, 0, 0, 0, 0, 0}, 1, 4, 5, time.Time{}, 4, 0.01, 2},
 		"g2": GroupCounts{Counts{0, 0, 0, 0, 0, 0}, 1, 5, 6, time.Time{}, 40, 0.1, 3},
@@ -58,7 +58,7 @@ func (s MySuite) TestGrouperBasic(c *C) {
 	_, err = gr.Update(procInfoIter(p1, p2, p3))
 	c.Assert(err, IsNil)
 
-	got2 := gr.groups()
+	got2 := gr.curgroups()
 	want2 := GroupCountMap{
 		"g1": GroupCounts{Counts{1, 1, 1, 1, 1, 1}, 1, 5, 6, time.Time{}, 4, 0.01, 2},
 		"g2": GroupCounts{Counts{2, 2, 2, 2, 2, 2}, 1, 7, 8, time.Time{}, 40, 0.1, 3},
@@ -76,7 +76,7 @@ func (s MySuite) TestGrouperBasic(c *C) {
 	_, err = gr.Update(procInfoIter(p1, p2, p3, p4))
 	c.Assert(err, IsNil)
 
-	got3 := gr.groups()
+	got3 := gr.curgroups()
 	want3 := GroupCountMap{
 		"g1": GroupCounts{Counts{0, 0, 0, 0, 0, 0}, 1, 5, 6, time.Time{}, 4, 0.01, 2},
 		"g2": GroupCounts{Counts{1, 1, 1, 1, 1, 1}, 2, 9, 10, time.Time{}, 120, 0.2, 11},
@@ -89,7 +89,7 @@ func (s MySuite) TestGrouperBasic(c *C) {
 	_, err = gr.Update(procInfoIter(p1, p2, p3, p4))
 	c.Assert(err, IsNil)
 
-	got4 := gr.groups()
+	got4 := gr.curgroups()
 	want4 := GroupCountMap{
 		"g1": GroupCounts{Counts{0, 0, 0, 0, 0, 0}, 1, 5, 6, time.Time{}, 4, 0.01, 2},
 		"g2": GroupCounts{Counts{2, 2, 2, 2, 2, 2}, 2, 10, 11, time.Time{}, 140, 0.25, 11},
@@ -118,7 +118,7 @@ func (s MySuite) TestGrouperParents(c *C) {
 	_, err := gr.Update(procInfoIter(p1, p2, p3))
 	c.Assert(err, IsNil)
 
-	got1 := gr.groups()
+	got1 := gr.curgroups()
 	want1 := GroupCountMap{
 		"g1": GroupCounts{Counts{}, 1, 0, 0, time.Time{}, 0, 0, 1},
 		"g2": GroupCounts{Counts{}, 1, 0, 0, time.Time{}, 0, 0, 1},
@@ -135,7 +135,7 @@ func (s MySuite) TestGrouperParents(c *C) {
 	_, err = gr.Update(procInfoIter(p1, p2, p3, p4, p5, p6))
 	c.Assert(err, IsNil)
 
-	got2 := gr.groups()
+	got2 := gr.curgroups()
 	want2 := GroupCountMap{
 		"g1": GroupCounts{Counts{}, 2, 0, 0, time.Time{}, 0, 0, 2},
 		"g2": GroupCounts{Counts{}, 2, 0, 0, time.Time{}, 0, 0, 2},
@@ -151,7 +151,7 @@ func (s MySuite) TestGrouperParents(c *C) {
 	_, err = gr.Update(procInfoIter(p1, p2, p3, p5, p6, p7, p8, p9))
 	c.Assert(err, IsNil)
 
-	got3 := gr.groups()
+	got3 := gr.curgroups()
 	want3 := GroupCountMap{
 		"g1": GroupCounts{Counts{}, 1, 0, 0, time.Time{}, 0, 0, 1},
 		"g2": GroupCounts{Counts{}, 5, 0, 0, time.Time{}, 0, 0, 5},

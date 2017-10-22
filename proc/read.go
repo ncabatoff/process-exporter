@@ -10,18 +10,13 @@ import (
 	"github.com/prometheus/procfs"
 )
 
+// ErrProcNotExist indicates a process couldn't be read because it doesn't exist,
+// typically because it disappeared while we were reading it.
 var ErrProcNotExist = fmt.Errorf("process does not exist")
 
-func newProcIdStatic(pid, ppid int, startTime uint64, name string, cmdline []string) ProcIdStatic {
-	return ProcIdStatic{
-		ProcId{pid, startTime},
-		ProcStatic{name, cmdline, ppid, time.Unix(int64(startTime), 0).UTC()},
-	}
-}
-
 type (
-	// ProcId uniquely identifies a process.
-	ProcId struct {
+	// ID uniquely identifies a process.
+	ID struct {
 		// UNIX process id
 		Pid int
 		// The time the process started after system boot, the value is expressed
@@ -29,60 +24,57 @@ type (
 		StartTimeRel uint64
 	}
 
-	// ProcStatic contains data read from /proc/pid/*
-	ProcStatic struct {
+	// Static contains data read from /proc/pid/*
+	Static struct {
 		Name      string
 		Cmdline   []string
 		ParentPid int
 		StartTime time.Time
 	}
 
+	// Counts are metric counters common to threads and processes and groups.
 	Counts struct {
-		CpuUserTime     float64
-		CpuSystemTime   float64
+		CPUUserTime     float64
+		CPUSystemTime   float64
 		ReadBytes       uint64
 		WriteBytes      uint64
 		MajorPageFaults uint64
 		MinorPageFaults uint64
 	}
 
+	// Memory describes a proc's memory usage.
 	Memory struct {
 		ResidentBytes uint64
 		VirtualBytes  uint64
 	}
 
+	// Filedesc describes a proc's file descriptor usage and soft limit.
 	Filedesc struct {
-		Open  int64 // -1 if we don't know
+		// Open is the count of open file descriptors, -1 if unknown.
+		Open int64
+		// Limit is the fd soft limit for the process.
 		Limit uint64
 	}
 
-	// ProcMetrics contains data read from /proc/pid/*
-	ProcMetrics struct {
+	// Metrics contains data read from /proc/pid/*
+	Metrics struct {
 		Counts
 		Memory
 		Filedesc
 		NumThreads uint64
 	}
 
-	ProcThread struct {
+	// Thread contains the name and counts for a thread.
+	Thread struct {
 		ThreadName string
 		Counts
 	}
 
-	ProcIdStatic struct {
-		ProcId
-		ProcStatic
-	}
-
-	ProcInfo struct {
-		ProcStatic
-		ProcMetrics
-	}
-
-	ProcIdInfo struct {
-		ProcId
-		ProcStatic
-		ProcMetrics
+	// IDInfo groups all info for a single process.
+	IDInfo struct {
+		ID
+		Static
+		Metrics
 	}
 
 	// ProcIdInfoThreads struct {
@@ -97,15 +89,15 @@ type (
 	Proc interface {
 		// GetPid() returns the POSIX PID (process id).  They may be reused over time.
 		GetPid() int
-		// GetProcId() returns (pid,starttime), which can be considered a unique process id.
-		GetProcId() (ProcId, error)
+		// GetProcID() returns (pid,starttime), which can be considered a unique process id.
+		GetProcID() (ID, error)
 		// GetStatic() returns various details read from files under /proc/<pid>/.  Technically
 		// name may not be static, but we'll pretend it is.
-		GetStatic() (ProcStatic, error)
+		GetStatic() (Static, error)
 		// GetMetrics() returns various metrics read from files under /proc/<pid>/.
 		// It returns an error on complete failure.  Otherwise, it returns metrics
 		// and 0 on complete success, 1 if some (like I/O) couldn't be read.
-		GetMetrics() (ProcMetrics, int, error)
+		GetMetrics() (Metrics, int, error)
 		GetCounts() (Counts, int, error)
 		// GetThreads() ([]ProcThread, error)
 	}
@@ -114,7 +106,7 @@ type (
 	// that caches results of some reads.
 	proccache struct {
 		procfs.Proc
-		procid  *ProcId
+		procid  *ID
 		stat    *procfs.ProcStat
 		cmdline []string
 		io      *procfs.ProcIO
@@ -137,8 +129,8 @@ type (
 		fs    *FS
 	}
 
-	// ProcIter is an iterator over a sequence of procs.
-	ProcIter interface {
+	// Iter is an iterator over a sequence of procs.
+	Iter interface {
 		// Next returns true if the iterator is not exhausted.
 		Next() bool
 		// Close releases any resources the iterator uses.
@@ -147,7 +139,7 @@ type (
 		Proc
 	}
 
-	// procIterator implements the ProcIter interface
+	// procIterator implements the Iter interface
 	procIterator struct {
 		// procs is the list of Proc we're iterating over.
 		procs
@@ -160,20 +152,35 @@ type (
 		// iterator is exhausted.
 		Proc
 	}
+
+	// Source is a source of procs.
+	Source interface {
+		// AllProcs returns all the processes in this source at this moment in time.
+		AllProcs() Iter
+	}
+
+	// FS implements Source.
+	FS struct {
+		procfs.FS
+		BootTime   int64
+		MountPoint string
+	}
 )
 
+// Add adds c2 to the counts.
 func (c *Counts) Add(c2 Counts) {
-	c.CpuUserTime += c2.CpuUserTime
-	c.CpuSystemTime += c2.CpuSystemTime
+	c.CPUUserTime += c2.CPUUserTime
+	c.CPUSystemTime += c2.CPUSystemTime
 	c.ReadBytes += c2.ReadBytes
 	c.WriteBytes += c2.WriteBytes
 	c.MajorPageFaults += c2.MajorPageFaults
 	c.MinorPageFaults += c2.MinorPageFaults
 }
 
+// Sub subtracts c2 from the counts.
 func (c *Counts) Sub(c2 Counts) {
-	c.CpuUserTime -= c2.CpuUserTime
-	c.CpuSystemTime -= c2.CpuSystemTime
+	c.CPUUserTime -= c2.CPUUserTime
+	c.CPUSystemTime -= c2.CPUSystemTime
 	c.ReadBytes -= c2.ReadBytes
 	c.WriteBytes -= c2.WriteBytes
 	c.MajorPageFaults -= c2.MajorPageFaults
@@ -184,49 +191,36 @@ func (c *Counts) Sub(c2 Counts) {
 //	return p.Threads, nil
 //}
 
-// Info reads the ProcIdInfo for a proc and returns it or a zero value plus
-// an error.
-func Info(p Proc) (ProcIdInfo, error) {
-	id, err := p.GetProcId()
-	if err != nil {
-		return ProcIdInfo{}, err
-	}
-	static, err := p.GetStatic()
-	if err != nil {
-		return ProcIdInfo{}, err
-	}
-	metrics, _, err := p.GetMetrics()
-	if err != nil {
-		return ProcIdInfo{}, err
-	}
-	return ProcIdInfo{id, static, metrics}, nil
+// GetPid implements Proc.
+func (p IDInfo) GetPid() int {
+	return p.ID.Pid
 }
 
-func (p ProcIdInfo) GetPid() int {
-	return p.ProcId.Pid
+// GetProcID implements Proc.
+func (p IDInfo) GetProcID() (ID, error) {
+	return p.ID, nil
 }
 
-func (p ProcIdInfo) GetProcId() (ProcId, error) {
-	return p.ProcId, nil
+// GetStatic implements Proc.
+func (p IDInfo) GetStatic() (Static, error) {
+	return p.Static, nil
 }
 
-func (p ProcIdInfo) GetStatic() (ProcStatic, error) {
-	return p.ProcStatic, nil
+// GetCounts implements Proc.
+func (p IDInfo) GetCounts() (Counts, int, error) {
+	return p.Metrics.Counts, 0, nil
 }
 
-func (p ProcIdInfo) GetCounts() (Counts, int, error) {
-	return p.ProcMetrics.Counts, 0, nil
-}
-
-func (p ProcIdInfo) GetMetrics() (ProcMetrics, int, error) {
-	return p.ProcMetrics, 0, nil
+// GetMetrics implements Proc.
+func (p IDInfo) GetMetrics() (Metrics, int, error) {
+	return p.Metrics, 0, nil
 }
 
 func (p *proccache) GetPid() int {
 	return p.Proc.PID
 }
 
-func (p *proccache) GetStat() (procfs.ProcStat, error) {
+func (p *proccache) getStat() (procfs.ProcStat, error) {
 	if p.stat == nil {
 		stat, err := p.Proc.NewStat()
 		if err != nil {
@@ -238,19 +232,20 @@ func (p *proccache) GetStat() (procfs.ProcStat, error) {
 	return *p.stat, nil
 }
 
-func (p *proccache) GetProcId() (ProcId, error) {
+// GetProcID implements Proc.
+func (p *proccache) GetProcID() (ID, error) {
 	if p.procid == nil {
-		stat, err := p.GetStat()
+		stat, err := p.getStat()
 		if err != nil {
-			return ProcId{}, err
+			return ID{}, err
 		}
-		p.procid = &ProcId{Pid: p.GetPid(), StartTimeRel: stat.Starttime}
+		p.procid = &ID{Pid: p.GetPid(), StartTimeRel: stat.Starttime}
 	}
 
 	return *p.procid, nil
 }
 
-func (p *proccache) GetCmdLine() ([]string, error) {
+func (p *proccache) getCmdLine() ([]string, error) {
 	if p.cmdline == nil {
 		cmdline, err := p.Proc.CmdLine()
 		if err != nil {
@@ -261,7 +256,7 @@ func (p *proccache) GetCmdLine() ([]string, error) {
 	return p.cmdline, nil
 }
 
-func (p *proccache) GetIo() (procfs.ProcIO, error) {
+func (p *proccache) getIo() (procfs.ProcIO, error) {
 	if p.io == nil {
 		io, err := p.Proc.NewIO()
 		if err != nil {
@@ -273,20 +268,20 @@ func (p *proccache) GetIo() (procfs.ProcIO, error) {
 }
 
 // GetStatic returns the ProcStatic corresponding to this proc.
-func (p *proccache) GetStatic() (ProcStatic, error) {
+func (p *proccache) GetStatic() (Static, error) {
 	// /proc/<pid>/cmdline is normally world-readable.
-	cmdline, err := p.GetCmdLine()
+	cmdline, err := p.getCmdLine()
 	if err != nil {
-		return ProcStatic{}, err
+		return Static{}, err
 	}
 	// /proc/<pid>/stat is normally world-readable.
-	stat, err := p.GetStat()
+	stat, err := p.getStat()
 	if err != nil {
-		return ProcStatic{}, err
+		return Static{}, err
 	}
 	startTime := time.Unix(p.fs.BootTime, 0).UTC()
 	startTime = startTime.Add(time.Second / userHZ * time.Duration(stat.Starttime))
-	return ProcStatic{
+	return Static{
 		Name:      stat.Comm,
 		Cmdline:   cmdline,
 		ParentPid: stat.PPID,
@@ -295,7 +290,7 @@ func (p *proccache) GetStatic() (ProcStatic, error) {
 }
 
 func (p proc) GetCounts() (Counts, int, error) {
-	stat, err := p.GetStat()
+	stat, err := p.getStat()
 	if err != nil {
 		if err == os.ErrNotExist {
 			err = ErrProcNotExist
@@ -303,14 +298,14 @@ func (p proc) GetCounts() (Counts, int, error) {
 		return Counts{}, 0, err
 	}
 
-	io, err := p.GetIo()
+	io, err := p.getIo()
 	softerrors := 0
 	if err != nil {
 		softerrors++
 	}
 	return Counts{
-		CpuUserTime:     float64(stat.UTime) / userHZ,
-		CpuSystemTime:   float64(stat.STime) / userHZ,
+		CPUUserTime:     float64(stat.UTime) / userHZ,
+		CPUSystemTime:   float64(stat.STime) / userHZ,
 		ReadBytes:       io.ReadBytes,
 		WriteBytes:      io.WriteBytes,
 		MajorPageFaults: uint64(stat.MajFlt),
@@ -320,17 +315,17 @@ func (p proc) GetCounts() (Counts, int, error) {
 
 // GetMetrics returns the current metrics for the proc.  The results are
 // not cached.
-func (p proc) GetMetrics() (ProcMetrics, int, error) {
+func (p proc) GetMetrics() (Metrics, int, error) {
 	counts, softerrors, err := p.GetCounts()
 	if err != nil {
-		return ProcMetrics{}, 0, err
+		return Metrics{}, 0, err
 	}
 
 	// We don't need to check for error here because p will have cached
-	// the successful result of calling GetStat in GetCounts.
+	// the successful result of calling getStat in GetCounts.
 	// Since GetMetrics isn't a pointer receiver method, our callers
 	// won't see the effect of the caching between calls.
-	stat, _ := p.GetStat()
+	stat, _ := p.getStat()
 
 	numfds, err := p.Proc.FileDescriptorsLen()
 	if err != nil {
@@ -340,10 +335,10 @@ func (p proc) GetMetrics() (ProcMetrics, int, error) {
 
 	limits, err := p.Proc.NewLimits()
 	if err != nil {
-		return ProcMetrics{}, 0, err
+		return Metrics{}, 0, err
 	}
 
-	return ProcMetrics{
+	return Metrics{
 		Counts: counts,
 		Memory: Memory{
 			ResidentBytes: uint64(stat.ResidentMemory()),
@@ -357,26 +352,28 @@ func (p proc) GetMetrics() (ProcMetrics, int, error) {
 	}, softerrors, nil
 }
 
-func (p proc) GetThreads() ([]ProcThread, error) {
-	fs, err := p.fs.ThreadFs(p.PID)
+func (p proc) GetThreads() ([]Thread, error) {
+	fs, err := p.fs.threadFs(p.PID)
 	if err != nil {
 		return nil, err
 	}
 
-	threads := []ProcThread{}
+	threads := []Thread{}
 	iter := fs.AllProcs()
 	for iter.Next() {
-		static, err := iter.GetStatic()
+		var static Static
+		static, err = iter.GetStatic()
 		if err != nil {
 			continue
 		}
-		metrics, _, err := iter.GetCounts()
+		var counts Counts
+		counts, _, err = iter.GetCounts()
 		if err != nil {
 			continue
 		}
-		threads = append(threads, ProcThread{
+		threads = append(threads, Thread{
 			ThreadName: static.Name,
-			Counts:     metrics,
+			Counts:     counts,
 		})
 	}
 	err = iter.Close()
@@ -385,12 +382,6 @@ func (p proc) GetThreads() ([]ProcThread, error) {
 	}
 
 	return threads, nil
-}
-
-type FS struct {
-	procfs.FS
-	BootTime   int64
-	MountPoint string
 }
 
 // See https://github.com/prometheus/procfs/blob/master/proc_stat.go for details on userHZ.
@@ -410,7 +401,7 @@ func NewFS(mountPoint string) (*FS, error) {
 	return &FS{fs, stat.BootTime, mountPoint}, nil
 }
 
-func (fs *FS) ThreadFs(pid int) (*FS, error) {
+func (fs *FS) threadFs(pid int) (*FS, error) {
 	mountPoint := filepath.Join(fs.MountPoint, strconv.Itoa(pid), "task")
 	tfs, err := procfs.NewFS(mountPoint)
 	if err != nil {
@@ -419,7 +410,8 @@ func (fs *FS) ThreadFs(pid int) (*FS, error) {
 	return &FS{tfs, fs.BootTime, mountPoint}, nil
 }
 
-func (fs *FS) AllProcs() ProcIter {
+// AllProcs implements Source.
+func (fs *FS) AllProcs() Iter {
 	procs, err := fs.FS.AllProcs()
 	if err != nil {
 		err = fmt.Errorf("Error reading procs: %v", err)
@@ -427,14 +419,17 @@ func (fs *FS) AllProcs() ProcIter {
 	return &procIterator{procs: procfsprocs{procs, fs}, err: err, idx: -1}
 }
 
+// get implements procs.
 func (p procfsprocs) get(i int) Proc {
 	return &proc{proccache{Proc: p.Procs[i], fs: p.fs}}
 }
 
+// length implements procs.
 func (p procfsprocs) length() int {
 	return len(p.Procs)
 }
 
+// Next implements Iter.
 func (pi *procIterator) Next() bool {
 	pi.idx++
 	if pi.idx < pi.procs.length() {
@@ -445,6 +440,7 @@ func (pi *procIterator) Next() bool {
 	return pi.idx < pi.procs.length()
 }
 
+// Close implements Iter.
 func (pi *procIterator) Close() error {
 	pi.Next()
 	pi.procs = nil

@@ -9,7 +9,7 @@ import (
 
 type grouptest struct {
 	grouper *Grouper
-	procs   ProcIter
+	procs   Iter
 	want    GroupByName
 }
 
@@ -21,7 +21,7 @@ type grouptest struct {
 //	c.Check(got, DeepEquals, gt.want, Commentf("diff %s", pretty.Compare(got, gt.want)))
 //}
 
-func run(t *testing.T, gr *Grouper, procs ProcIter) GroupByName {
+func run(t *testing.T, gr *Grouper, procs Iter) GroupByName {
 	_, groups, err := gr.Update(procs)
 	if err != nil {
 		t.Fatalf("group.Update error: %v", err)
@@ -30,12 +30,12 @@ func run(t *testing.T, gr *Grouper, procs ProcIter) GroupByName {
 	return groups
 }
 
-func piinfo(pid int, name string, c Counts, m Memory, f Filedesc, t int) ProcIdInfo {
-	pis := newProcIdStatic(pid, 0, 0, name, nil)
-	return ProcIdInfo{
-		ProcId:      pis.ProcId,
-		ProcStatic:  pis.ProcStatic,
-		ProcMetrics: ProcMetrics{c, m, f, uint64(t)},
+func piinfo(pid int, name string, c Counts, m Memory, f Filedesc, t int) IDInfo {
+	id, static := newProcIDStatic(pid, 0, 0, name, nil)
+	return IDInfo{
+		ID:      id,
+		Static:  static,
+		Metrics: Metrics{c, m, f, uint64(t)},
 	}
 }
 
@@ -48,11 +48,11 @@ func TestGrouperBasic(t *testing.T) {
 	starttime := time.Unix(0, 0).UTC()
 
 	tests := []struct {
-		procs []ProcIdInfo
+		procs []IDInfo
 		want  GroupByName
 	}{
 		{
-			[]ProcIdInfo{
+			[]IDInfo{
 				piinfo(p1, n1, Counts{1, 2, 3, 4, 5, 6}, Memory{7, 8}, Filedesc{4, 400}, 2),
 				piinfo(p2, n2, Counts{2, 3, 4, 5, 6, 7}, Memory{8, 9}, Filedesc{40, 400}, 3),
 			},
@@ -62,7 +62,7 @@ func TestGrouperBasic(t *testing.T) {
 			},
 		},
 		{
-			[]ProcIdInfo{
+			[]IDInfo{
 				piinfo(p1, n1, Counts{2, 3, 4, 5, 6, 7}, Memory{6, 7}, Filedesc{100, 400}, 4),
 				piinfo(p2, n2, Counts{4, 5, 6, 7, 8, 9}, Memory{9, 8}, Filedesc{400, 400}, 2),
 			},
@@ -90,11 +90,11 @@ func TestGrouperProcJoin(t *testing.T) {
 	starttime := time.Unix(0, 0).UTC()
 
 	tests := []struct {
-		procs []ProcIdInfo
+		procs []IDInfo
 		want  GroupByName
 	}{
 		{
-			[]ProcIdInfo{
+			[]IDInfo{
 				piinfo(p1, n1, Counts{1, 2, 3, 4, 5, 6}, Memory{3, 4}, Filedesc{4, 400}, 2),
 			},
 			GroupByName{
@@ -104,7 +104,7 @@ func TestGrouperProcJoin(t *testing.T) {
 			// The counts for pid2 won't be factored into the total yet because we only add
 			// to counts starting with the second time we see a proc. Memory and FDs are
 			// affected though.
-			[]ProcIdInfo{
+			[]IDInfo{
 				piinfo(p1, n1, Counts{3, 4, 5, 6, 7, 8}, Memory{3, 4}, Filedesc{4, 400}, 2),
 				piinfo(p2, n2, Counts{1, 1, 1, 1, 1, 1}, Memory{1, 2}, Filedesc{40, 400}, 3),
 			},
@@ -112,7 +112,7 @@ func TestGrouperProcJoin(t *testing.T) {
 				"g1": Group{Counts{2, 2, 2, 2, 2, 2}, 2, Memory{4, 6}, starttime, 44, 0.1, 5},
 			},
 		}, {
-			[]ProcIdInfo{
+			[]IDInfo{
 				piinfo(p1, n1, Counts{4, 5, 6, 7, 8, 9}, Memory{1, 5}, Filedesc{4, 400}, 2),
 				piinfo(p2, n2, Counts{2, 2, 2, 2, 2, 2}, Memory{2, 4}, Filedesc{40, 400}, 3),
 			},
@@ -138,11 +138,11 @@ func TestGrouperNonDecreasing(t *testing.T) {
 	starttime := time.Unix(0, 0).UTC()
 
 	tests := []struct {
-		procs []ProcIdInfo
+		procs []IDInfo
 		want  GroupByName
 	}{
 		{
-			[]ProcIdInfo{
+			[]IDInfo{
 				piinfo(p1, n1, Counts{3, 4, 5, 6, 7, 8}, Memory{3, 4}, Filedesc{4, 400}, 2),
 				piinfo(p2, n2, Counts{1, 1, 1, 1, 1, 1}, Memory{1, 2}, Filedesc{40, 400}, 3),
 			},
@@ -150,14 +150,14 @@ func TestGrouperNonDecreasing(t *testing.T) {
 				"g1": Group{Counts{}, 2, Memory{4, 6}, starttime, 44, 0.1, 5},
 			},
 		}, {
-			[]ProcIdInfo{
+			[]IDInfo{
 				piinfo(p1, n1, Counts{4, 5, 6, 7, 8, 9}, Memory{1, 5}, Filedesc{4, 400}, 2),
 			},
 			GroupByName{
 				"g1": Group{Counts{1, 1, 1, 1, 1, 1}, 1, Memory{1, 5}, starttime, 4, 0.01, 2},
 			},
 		}, {
-			[]ProcIdInfo{},
+			[]IDInfo{},
 			GroupByName{
 				"g1": Group{Counts{1, 1, 1, 1, 1, 1}, 0, Memory{}, time.Time{}, 0, 0, 0},
 			},

@@ -15,10 +15,10 @@ type (
 		// tracked holds the processes are being monitored.  Processes
 		// may be blacklisted such that they no longer get tracked by
 		// setting their value in the tracked map to nil.
-		tracked map[ProcId]*trackedProc
+		tracked map[ID]*trackedProc
 		// procIds is a map from pid to ProcId.  This is a convenience
 		// to allow finding the Tracked entry of a parent process.
-		procIds map[int]ProcId
+		procIds map[int]ID
 		// trackChildren makes Tracker track descendants of procs the
 		// namer wanted tracked.
 		trackChildren bool
@@ -29,16 +29,17 @@ type (
 	trackedProc struct {
 		// lastUpdate is used internally during the update cycle to find which procs have exited
 		lastUpdate time.Time
-		// info is the most recently obtained info for this proc
-		info ProcInfo
+		// static
+		static  Static
+		metrics Metrics
 		// lastaccum is the increment to the counters seen in the last update.
 		lastaccum Counts
 		// groupName is the tag for this proc given by the namer.
 		groupName string
 	}
 
-	// ProcUpdate reports on the latest stats for a process.
-	ProcUpdate struct {
+	// Update reports on the latest stats for a process.
+	Update struct {
 		GroupName string
 		Latest    Counts
 		Memory
@@ -47,6 +48,8 @@ type (
 		NumThreads uint64
 	}
 
+	// CollectErrors describes non-fatal errors found while collecting proc
+	// metrics.
 	CollectErrors struct {
 		// Read is incremented every time GetMetrics() returns an error.
 		// This means we failed to load even the basics for the process,
@@ -59,49 +62,45 @@ type (
 	}
 )
 
-func (tp *trackedProc) GetName() string {
-	return tp.info.Name
-}
-
-func (tp *trackedProc) GetCmdLine() []string {
-	return tp.info.Cmdline
-}
-
-func (tp *trackedProc) getUpdate() ProcUpdate {
-	return ProcUpdate{
+func (tp *trackedProc) getUpdate() Update {
+	return Update{
 		GroupName:  tp.groupName,
 		Latest:     tp.lastaccum,
-		Memory:     tp.info.Memory,
-		Filedesc:   tp.info.Filedesc,
-		Start:      tp.info.StartTime,
-		NumThreads: tp.info.NumThreads,
+		Memory:     tp.metrics.Memory,
+		Filedesc:   tp.metrics.Filedesc,
+		Start:      tp.static.StartTime,
+		NumThreads: tp.metrics.NumThreads,
 	}
 }
 
+// NewTracker creates a Tracker.
 func NewTracker(namer common.MatchNamer, trackChildren bool) *Tracker {
 	return &Tracker{
 		namer:         namer,
-		tracked:       make(map[ProcId]*trackedProc),
-		procIds:       make(map[int]ProcId),
+		tracked:       make(map[ID]*trackedProc),
+		procIds:       make(map[int]ID),
 		trackChildren: trackChildren,
 	}
 }
 
-func (t *Tracker) track(groupName string, idinfo ProcIdInfo) {
-	info := ProcInfo{idinfo.ProcStatic, idinfo.ProcMetrics}
-	t.tracked[idinfo.ProcId] = &trackedProc{groupName: groupName, info: info}
+func (t *Tracker) track(groupName string, idinfo IDInfo) {
+	t.tracked[idinfo.ID] = &trackedProc{
+		groupName: groupName,
+		static:    idinfo.Static,
+		metrics:   idinfo.Metrics,
+	}
 }
 
-func (t *Tracker) ignore(id ProcId) {
+func (t *Tracker) ignore(id ID) {
 	t.tracked[id] = nil
 }
 
-func updateProc(metrics ProcMetrics, tproc *trackedProc, updateTime time.Time, cerrs *CollectErrors) {
+func updateProc(metrics Metrics, tproc *trackedProc, updateTime time.Time, cerrs *CollectErrors) {
 	// newcounts: resource consumption since last cycle
 	newcounts := metrics.Counts
-	newcounts.Sub(tproc.info.Counts)
+	newcounts.Sub(tproc.metrics.Counts)
 
-	tproc.info.ProcMetrics = metrics
+	tproc.metrics = metrics
 	tproc.lastUpdate = updateTime
 	tproc.lastaccum = newcounts
 }
@@ -111,15 +110,15 @@ func updateProc(metrics ProcMetrics, tproc *trackedProc, updateTime time.Time, c
 // It is not an error if the process disappears while we are reading
 // its info out of /proc, it just means nothing will be returned and
 // the tracker will be unchanged.
-func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*ProcIdInfo, CollectErrors) {
+func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectErrors) {
 	var cerrs CollectErrors
-	procId, err := proc.GetProcId()
+	procID, err := proc.GetProcID()
 	if err != nil {
 		return nil, cerrs
 	}
 
 	// Do nothing if we're ignoring this proc.
-	last, known := t.tracked[procId]
+	last, known := t.tracked[procID]
 	if known && last == nil {
 		return nil, cerrs
 	}
@@ -135,7 +134,7 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*ProcIdInfo, Coll
 	}
 	cerrs.Partial += softerrors
 
-	var newProc *ProcIdInfo
+	var newProc *IDInfo
 	if known {
 		updateProc(metrics, last, updateTime, &cerrs)
 	} else {
@@ -143,15 +142,15 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*ProcIdInfo, Coll
 		if err != nil {
 			return nil, cerrs
 		}
-		newProc = &ProcIdInfo{procId, static, metrics}
+		newProc = &IDInfo{procID, static, metrics}
 
 		// Is this a new process with the same pid as one we already know?
 		// Then delete it from the known map, otherwise the cleanup in Update()
 		// will remove the ProcIds entry we're creating here.
-		if oldProcId, ok := t.procIds[procId.Pid]; ok {
-			delete(t.tracked, oldProcId)
+		if oldProcID, ok := t.procIds[procID.Pid]; ok {
+			delete(t.tracked, oldProcID)
 		}
-		t.procIds[procId.Pid] = procId
+		t.procIds[procID.Pid] = procID
 	}
 	return newProc, cerrs
 }
@@ -159,8 +158,8 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*ProcIdInfo, Coll
 // update scans procs and updates metrics for those which are tracked. Processes
 // that have gone away get removed from the Tracked map. New processes are
 // returned, along with the count of permission errors.
-func (t *Tracker) update(procs ProcIter) ([]ProcIdInfo, CollectErrors, error) {
-	var newProcs []ProcIdInfo
+func (t *Tracker) update(procs Iter) ([]IDInfo, CollectErrors, error) {
+	var newProcs []IDInfo
 	var colErrs CollectErrors
 	var now = time.Now()
 
@@ -182,15 +181,15 @@ func (t *Tracker) update(procs ProcIter) ([]ProcIdInfo, CollectErrors, error) {
 	// disappeared, we bump the last update time on those that are still
 	// present.  Then as a second pass we traverse the map looking for
 	// stale procs and removing them.
-	for procId, pinfo := range t.tracked {
+	for procID, pinfo := range t.tracked {
 		if pinfo == nil {
 			// TODO is this a bug? we're not tracking the proc so we don't see it go away so ProcIds
 			// and Tracked are leaking?
 			continue
 		}
 		if pinfo.lastUpdate != now {
-			delete(t.tracked, procId)
-			delete(t.procIds, procId.Pid)
+			delete(t.tracked, procID)
+			delete(t.procIds, procID.Pid)
 		}
 	}
 
@@ -201,30 +200,29 @@ func (t *Tracker) update(procs ProcIter) ([]ProcIdInfo, CollectErrors, error) {
 // stopping at pid 1 or upon finding a parent that's already tracked
 // or ignored.  If we find a tracked parent track this one too; if not,
 // ignore this one.
-func (t *Tracker) checkAncestry(idinfo ProcIdInfo, newprocs map[ProcId]ProcIdInfo) string {
+func (t *Tracker) checkAncestry(idinfo IDInfo, newprocs map[ID]IDInfo) string {
 	ppid := idinfo.ParentPid
-	pProcId := t.procIds[ppid]
-	if pProcId.Pid < 1 {
+	pProcID := t.procIds[ppid]
+	if pProcID.Pid < 1 {
 		// Reached root of process tree without finding a tracked parent.
-		t.ignore(idinfo.ProcId)
+		t.ignore(idinfo.ID)
 		return ""
 	}
 
 	// Is the parent already known to the tracker?
-	if ptproc, ok := t.tracked[pProcId]; ok {
+	if ptproc, ok := t.tracked[pProcID]; ok {
 		if ptproc != nil {
 			// We've found a tracked parent.
 			t.track(ptproc.groupName, idinfo)
 			return ptproc.groupName
-		} else {
-			// We've found an untracked parent.
-			t.ignore(idinfo.ProcId)
-			return ""
 		}
+		// We've found an untracked parent.
+		t.ignore(idinfo.ID)
+		return ""
 	}
 
 	// Is the parent another new process?
-	if pinfoid, ok := newprocs[pProcId]; ok {
+	if pinfoid, ok := newprocs[pProcID]; ok {
 		if name := t.checkAncestry(pinfoid, newprocs); name != "" {
 			// We've found a tracked parent, which implies this entire lineage should be tracked.
 			t.track(name, idinfo)
@@ -233,35 +231,35 @@ func (t *Tracker) checkAncestry(idinfo ProcIdInfo, newprocs map[ProcId]ProcIdInf
 	}
 
 	// Parent is dead, i.e. we never saw it, or there's no tracked proc in our ancestry.
-	t.ignore(idinfo.ProcId)
+	t.ignore(idinfo.ID)
 	return ""
 }
 
 // Update tracks any new procs that should be according to policy, and updates
 // the metrics for already tracked procs.  Permission errors are returned as a
 // count, and will not affect the error return value.
-func (t *Tracker) Update(iter ProcIter) (CollectErrors, []ProcUpdate, error) {
+func (t *Tracker) Update(iter Iter) (CollectErrors, []Update, error) {
 	newProcs, colErrs, err := t.update(iter)
 	if err != nil {
 		return colErrs, nil, err
 	}
 
 	// Step 1: track any new proc that should be tracked based on its name and cmdline.
-	untracked := make(map[ProcId]ProcIdInfo)
+	untracked := make(map[ID]IDInfo)
 	for _, idinfo := range newProcs {
 		nacl := common.NameAndCmdline{Name: idinfo.Name, Cmdline: idinfo.Cmdline}
 		wanted, gname := t.namer.MatchAndName(nacl)
 		if wanted {
 			t.track(gname, idinfo)
 		} else {
-			untracked[idinfo.ProcId] = idinfo
+			untracked[idinfo.ID] = idinfo
 		}
 	}
 
 	// Step 2: track any untracked new proc that should be tracked because its parent is tracked.
 	if t.trackChildren {
 		for _, idinfo := range untracked {
-			if _, ok := t.tracked[idinfo.ProcId]; ok {
+			if _, ok := t.tracked[idinfo.ID]; ok {
 				// Already tracked or ignored in an earlier iteration
 				continue
 			}
@@ -270,7 +268,7 @@ func (t *Tracker) Update(iter ProcIter) (CollectErrors, []ProcUpdate, error) {
 		}
 	}
 
-	tp := []ProcUpdate{}
+	tp := []Update{}
 	for _, tproc := range t.tracked {
 		if tproc != nil {
 			tp = append(tp, tproc.getUpdate())

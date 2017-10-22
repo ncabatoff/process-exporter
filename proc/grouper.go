@@ -7,14 +7,19 @@ import (
 )
 
 type (
+	// Grouper is the top-level interface to the process metrics.  All tracked
+	// procs sharing the same group name are aggregated.
 	Grouper struct {
-		// track how much was seen last time so we can report the delta
+		// groupAccum records the historical accumulation of a group so that
+		// we can avoid ever decreasing the counts we return.
 		groupAccum map[string]Counts
 		tracker    *Tracker
 	}
 
+	// GroupByName maps group name to group metrics.
 	GroupByName map[string]Group
 
+	// Group describes the metrics of a single group.
 	Group struct {
 		Counts
 		Procs int
@@ -26,6 +31,7 @@ type (
 	}
 )
 
+// NewGrouper creates a grouper.
 func NewGrouper(trackChildren bool, namer common.MatchNamer) *Grouper {
 	g := Grouper{
 		groupAccum: make(map[string]Counts),
@@ -34,7 +40,7 @@ func NewGrouper(trackChildren bool, namer common.MatchNamer) *Grouper {
 	return &g
 }
 
-func groupadd(grp Group, ts ProcUpdate) Group {
+func groupadd(grp Group, ts Update) Group {
 	var zeroTime time.Time
 
 	grp.Procs++
@@ -56,7 +62,10 @@ func groupadd(grp Group, ts ProcUpdate) Group {
 	return grp
 }
 
-func (g *Grouper) Update(iter ProcIter) (CollectErrors, GroupByName, error) {
+// Update takes a snapshot of currently running processes and passes them
+// to the tracker.  Whatever updates the tracker returns are aggregated by
+// groupname, augmented by accumulated counts from the past, and returned.
+func (g *Grouper) Update(iter Iter) (CollectErrors, GroupByName, error) {
 	cerrs, tracked, err := g.tracker.Update(iter)
 	if err != nil {
 		return cerrs, nil, err

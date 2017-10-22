@@ -1,12 +1,34 @@
 package proc
 
-import common "github.com/ncabatoff/process-exporter"
+import (
+	"time"
+
+	common "github.com/ncabatoff/process-exporter"
+)
+
+// procinfo reads the ProcIdInfo for a proc and returns it or a zero value plus
+// an error.
+func procinfo(p Proc) (IDInfo, error) {
+	id, err := p.GetProcID()
+	if err != nil {
+		return IDInfo{}, err
+	}
+	static, err := p.GetStatic()
+	if err != nil {
+		return IDInfo{}, err
+	}
+	metrics, _, err := p.GetMetrics()
+	if err != nil {
+		return IDInfo{}, err
+	}
+	return IDInfo{id, static, metrics}, nil
+}
 
 // read everything in the iterator
-func consumeIter(pi ProcIter) ([]ProcIdInfo, error) {
-	infos := []ProcIdInfo{}
+func consumeIter(pi Iter) ([]IDInfo, error) {
+	infos := []IDInfo{}
 	for pi.Next() {
-		info, err := Info(pi)
+		info, err := procinfo(pi)
 		if err != nil {
 			return nil, err
 		}
@@ -32,11 +54,22 @@ func (n namer) MatchAndName(nacl common.NameAndCmdline) (bool, string) {
 	return false, ""
 }
 
-func newProc(pid int, name string, m ProcMetrics) ProcIdInfo {
-	pis := newProcIdStatic(pid, 0, 0, name, nil)
-	return ProcIdInfo{
-		ProcId:      pis.ProcId,
-		ProcStatic:  pis.ProcStatic,
-		ProcMetrics: m,
-	}
+func newProcIDStatic(pid, ppid int, startTime uint64, name string, cmdline []string) (ID, Static) {
+	return ID{pid, startTime},
+		Static{name, cmdline, ppid, time.Unix(int64(startTime), 0).UTC()}
+}
+
+func newProc(pid int, name string, m Metrics) IDInfo {
+	id, static := newProcIDStatic(pid, 0, 0, name, nil)
+	return IDInfo{id, static, m}
+}
+
+func newProcStart(pid int, name string, startTime uint64) IDInfo {
+	id, static := newProcIDStatic(pid, 0, startTime, name, nil)
+	return IDInfo{id, static, Metrics{}}
+}
+
+func newProcParent(pid int, name string, ppid int) IDInfo {
+	id, static := newProcIDStatic(pid, ppid, 0, name, nil)
+	return IDInfo{id, static, Metrics{}}
 }

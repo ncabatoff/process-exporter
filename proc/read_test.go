@@ -11,24 +11,24 @@ import (
 )
 
 type (
-	// procIdInfos implements procs using a slice of already
+	// procIDInfos implements procs using a slice of already
 	// populated ProcIdInfo.  Used for testing.
-	procIdInfos []ProcIdInfo
+	procIDInfos []IDInfo
 )
 
-func (p procIdInfos) get(i int) Proc {
+func (p procIDInfos) get(i int) Proc {
 	return &p[i]
 }
 
-func (p procIdInfos) length() int {
+func (p procIDInfos) length() int {
 	return len(p)
 }
 
-func procInfoIter(ps ...ProcIdInfo) *procIterator {
-	return &procIterator{procs: procIdInfos(ps), idx: -1}
+func procInfoIter(ps ...IDInfo) *procIterator {
+	return &procIterator{procs: procIDInfos(ps), idx: -1}
 }
 
-func allprocs(procpath string) ProcIter {
+func allprocs(procpath string) Iter {
 	fs, err := NewFS(procpath)
 	if err != nil {
 		cwd, _ := os.Getwd()
@@ -39,13 +39,13 @@ func allprocs(procpath string) ProcIter {
 
 func TestReadFixture(t *testing.T) {
 	procs := allprocs("../fixtures")
-	var pii ProcIdInfo
+	var pii IDInfo
 
 	count := 0
 	for procs.Next() {
 		count++
 		var err error
-		pii, err = Info(procs)
+		pii, err = procinfo(procs)
 		noerr(t, err)
 	}
 	err := procs.Close()
@@ -54,26 +54,26 @@ func TestReadFixture(t *testing.T) {
 		t.Fatalf("got %d procs, want 1", count)
 	}
 
-	wantprocid := ProcId{Pid: 14804, StartTimeRel: 0x4f27b}
-	if diff := cmp.Diff(pii.ProcId, wantprocid); diff != "" {
+	wantprocid := ID{Pid: 14804, StartTimeRel: 0x4f27b}
+	if diff := cmp.Diff(pii.ID, wantprocid); diff != "" {
 		t.Errorf("procid differs: (-got +want)\n%s", diff)
 	}
 
 	stime, _ := time.Parse(time.RFC3339Nano, "2017-10-19T22:52:51.19Z")
-	wantstatic := ProcStatic{
+	wantstatic := Static{
 		Name:      "process-exporte",
 		Cmdline:   []string{"./process-exporter", "-procnames", "bash"},
 		ParentPid: 10884,
 		StartTime: stime,
 	}
-	if diff := cmp.Diff(pii.ProcStatic, wantstatic); diff != "" {
+	if diff := cmp.Diff(pii.Static, wantstatic); diff != "" {
 		t.Errorf("static differs: (-got +want)\n%s", diff)
 	}
 
-	wantmetrics := ProcMetrics{
+	wantmetrics := Metrics{
 		Counts: Counts{
-			CpuUserTime:     0.1,
-			CpuSystemTime:   0.04,
+			CPUUserTime:     0.1,
+			CPUSystemTime:   0.04,
 			ReadBytes:       1814455,
 			WriteBytes:      0,
 			MajorPageFaults: 0x2ff,
@@ -89,7 +89,7 @@ func TestReadFixture(t *testing.T) {
 		},
 		NumThreads: 7,
 	}
-	if diff := cmp.Diff(pii.ProcMetrics, wantmetrics); diff != "" {
+	if diff := cmp.Diff(pii.Metrics, wantmetrics); diff != "" {
 		t.Errorf("metrics differs: (-got +want)\n%s", diff)
 	}
 }
@@ -109,7 +109,7 @@ func TestAllProcs(t *testing.T) {
 		if procs.GetPid() != os.Getpid() {
 			continue
 		}
-		procid, err := procs.GetProcId()
+		procid, err := procs.GetProcID()
 		noerr(t, err)
 		if procid.Pid != os.Getpid() {
 			t.Errorf("got %d, want %d", procid.Pid, os.Getpid())
@@ -160,12 +160,12 @@ func TestMissingIo(t *testing.T) {
 // Test that we can observe the absence of a child process before it spawns and after it exits,
 // and its presence during its lifetime.
 func TestAllProcsSpawn(t *testing.T) {
-	childprocs := func() []ProcIdStatic {
-		found := []ProcIdStatic{}
+	childprocs := func() []IDInfo {
+		found := []IDInfo{}
 		procs := allprocs("/proc")
 		mypid := os.Getpid()
 		for procs.Next() {
-			procid, err := procs.GetProcId()
+			procid, err := procs.GetProcID()
 			if err != nil {
 				continue
 			}
@@ -174,7 +174,7 @@ func TestAllProcsSpawn(t *testing.T) {
 				continue
 			}
 			if static.ParentPid == mypid {
-				found = append(found, ProcIdStatic{procid, static})
+				found = append(found, IDInfo{procid, static, Metrics{}})
 			}
 		}
 		err := procs.Close()
@@ -184,7 +184,7 @@ func TestAllProcsSpawn(t *testing.T) {
 		return found
 	}
 
-	foundcat := func(procs []ProcIdStatic) bool {
+	foundcat := func(procs []IDInfo) bool {
 		for _, proc := range procs {
 			if proc.Name == "cat" {
 				return true
@@ -218,9 +218,9 @@ func TestAllProcsSpawn(t *testing.T) {
 }
 
 func TestIterator(t *testing.T) {
-	p1 := newProc(1, "p1", ProcMetrics{})
-	p2 := newProc(2, "p2", ProcMetrics{})
-	want := []ProcIdInfo{p1, p2}
+	p1 := newProc(1, "p1", Metrics{})
+	p2 := newProc(2, "p2", Metrics{})
+	want := []IDInfo{p1, p2}
 	pis := procInfoIter(want...)
 	got, err := consumeIter(pis)
 	noerr(t, err)

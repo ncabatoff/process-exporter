@@ -321,7 +321,7 @@ type (
 	NamedProcessCollector struct {
 		scrapeChan chan scrapeRequest
 		*proc.Grouper
-		fs                     *proc.FS
+		source                 proc.Source
 		scrapeErrors           int
 		scrapeProcReadErrors   int
 		scrapePermissionErrors int
@@ -340,10 +340,10 @@ func NewProcessCollector(
 	p := &NamedProcessCollector{
 		scrapeChan: make(chan scrapeRequest),
 		Grouper:    proc.NewGrouper(children, n),
-		fs:         fs,
+		source:     fs,
 	}
 
-	colErrs, _, err := p.Update(p.fs.AllProcs())
+	colErrs, _, err := p.Update(p.source.AllProcs())
 	if err != nil {
 		return nil, err
 	}
@@ -390,7 +390,7 @@ func (p *NamedProcessCollector) start() {
 }
 
 func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
-	permErrs, groups, err := p.Update(p.fs.AllProcs())
+	permErrs, groups, err := p.Update(p.source.AllProcs())
 	p.scrapePermissionErrors += permErrs.Partial
 	if err != nil {
 		p.scrapeErrors++
@@ -410,9 +410,9 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(worstFDRatioDesc,
 				prometheus.GaugeValue, float64(gcounts.WorstFDratio), gname)
 			ch <- prometheus.MustNewConstMetric(cpuUserSecsDesc,
-				prometheus.CounterValue, gcounts.CpuUserTime, gname)
+				prometheus.CounterValue, gcounts.CPUUserTime, gname)
 			ch <- prometheus.MustNewConstMetric(cpuSystemSecsDesc,
-				prometheus.CounterValue, gcounts.CpuSystemTime, gname)
+				prometheus.CounterValue, gcounts.CPUSystemTime, gname)
 			ch <- prometheus.MustNewConstMetric(readBytesDesc,
 				prometheus.CounterValue, float64(gcounts.ReadBytes), gname)
 			ch <- prometheus.MustNewConstMetric(writeBytesDesc,

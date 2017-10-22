@@ -1,21 +1,83 @@
 package proc
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
+	"time"
 
 	. "gopkg.in/check.v1"
 )
 
-var fs *FS
+type (
+	// procIdInfos implements procs using a slice of already
+	// populated ProcIdInfo.  Used for testing.
+	procIdInfos []ProcIdInfo
+)
 
-func init() {
-	fs, _ = NewFS("/proc")
+func (p procIdInfos) get(i int) Proc {
+	return &p[i]
+}
+
+func (p procIdInfos) length() int {
+	return len(p)
+}
+
+func procInfoIter(ps ...ProcIdInfo) *procIterator {
+	return &procIterator{procs: procIdInfos(ps), idx: -1}
+}
+
+func allprocs(procpath string) ProcIter {
+	fs, err := NewFS(procpath)
+	if err != nil {
+		cwd, _ := os.Getwd()
+		panic("can't read " + procpath + ", cwd=" + cwd + ", err=" + fmt.Sprintf("%v", err))
+	}
+	return fs.AllProcs()
+}
+
+func (s MySuite) TestReadFixture(c *C) {
+	procs := allprocs("../fixtures")
+	count := 0
+	for procs.Next() {
+		count++
+		c.Assert(count, Equals, 1)
+
+		c.Check(procs.GetPid(), Equals, 14804)
+
+		procid, err := procs.GetProcId()
+		c.Assert(err, IsNil)
+		c.Check(procid, Equals, ProcId{Pid: 14804, StartTimeRel: 0x4f27b})
+
+		static, err := procs.GetStatic()
+		c.Assert(err, IsNil)
+		c.Check(static.Name, Equals, "process-exporte")
+		c.Check(static.Cmdline, DeepEquals, []string{"./process-exporter", "-procnames", "bash"})
+		c.Check(static.ParentPid, Equals, 10884)
+		c.Check(static.StartTime.UTC().Format(time.RFC3339), Equals, "2017-10-19T22:52:51Z")
+
+		metrics, softerrs, err := procs.GetMetrics()
+		c.Assert(err, IsNil)
+		c.Assert(softerrs, Equals, 0)
+		c.Check(metrics.CpuUserTime, Equals, 0.1)
+		c.Check(metrics.CpuSystemTime, Equals, 0.04)
+		c.Check(metrics.ReadBytes, Equals, uint64(1814455))
+		c.Check(metrics.WriteBytes, Equals, uint64(0))
+		c.Check(metrics.ResidentBytes, Equals, uint64(0x7b1000))
+		c.Check(metrics.VirtualBytes, Equals, uint64(0x1061000))
+		c.Check(metrics.Filedesc, Equals, Filedesc{5, 0x400})
+		c.Check(metrics.MajorPageFaults, Equals, uint64(0x2ff))
+		c.Check(metrics.MinorPageFaults, Equals, uint64(0x643))
+		c.Check(metrics.NumThreads, Equals, uint64(7))
+	}
+	err := procs.Close()
+	c.Assert(err, IsNil)
+	c.Check(count, Not(Equals), 0)
 }
 
 // Basic test of proc reading: does AllProcs return at least two procs, one of which is us.
 func (s MySuite) TestAllProcs(c *C) {
-	procs := fs.AllProcs()
+	procs := allprocs("/proc")
 	count := 0
 	for procs.Next() {
 		count++
@@ -37,17 +99,18 @@ func (s MySuite) TestAllProcs(c *C) {
 // Verify that pid 1 doesn't provide I/O or FD stats.  This test
 // fails if pid 1 is owned by the same user running the tests.
 func (s MySuite) TestMissingIo(c *C) {
-	procs := fs.AllProcs()
+	procs := allprocs("/proc")
 	for procs.Next() {
 		if procs.GetPid() != 1 {
 			continue
 		}
-		met, err := procs.GetMetrics()
+		met, softerrs, err := procs.GetMetrics()
 		c.Assert(err, IsNil)
-		c.Check(met.ReadBytes, Equals, int64(-1))
-		c.Check(met.WriteBytes, Equals, int64(-1))
+		c.Assert(softerrs, Equals, 1)
+		c.Check(met.ReadBytes, Equals, uint64(0))
+		c.Check(met.WriteBytes, Equals, uint64(0))
 		c.Check(met.ResidentBytes, Not(Equals), 0)
-		c.Check(met.MaxFDs, Not(Equals), 0)
+		c.Check(met.Filedesc.Limit, Not(Equals), 0)
 		return
 	}
 }
@@ -57,7 +120,7 @@ func (s MySuite) TestMissingIo(c *C) {
 func (s MySuite) TestAllProcsSpawn(c *C) {
 	childprocs := func() ([]ProcIdStatic, error) {
 		found := []ProcIdStatic{}
-		procs := fs.AllProcs()
+		procs := allprocs("/proc")
 		mypid := os.Getpid()
 		for procs.Next() {
 			procid, err := procs.GetProcId()

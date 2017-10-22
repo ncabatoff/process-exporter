@@ -400,9 +400,9 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(numprocsDesc,
 				prometheus.GaugeValue, float64(gcounts.Procs), gname)
 			ch <- prometheus.MustNewConstMetric(membytesDesc,
-				prometheus.GaugeValue, float64(gcounts.Memresident), gname, "resident")
+				prometheus.GaugeValue, float64(gcounts.Memory.ResidentBytes), gname, "resident")
 			ch <- prometheus.MustNewConstMetric(membytesDesc,
-				prometheus.GaugeValue, float64(gcounts.Memvirtual), gname, "virtual")
+				prometheus.GaugeValue, float64(gcounts.Memory.VirtualBytes), gname, "virtual")
 			ch <- prometheus.MustNewConstMetric(startTimeDesc,
 				prometheus.GaugeValue, float64(gcounts.OldestStartTime.Unix()), gname)
 			ch <- prometheus.MustNewConstMetric(openFDsDesc,
@@ -410,9 +410,9 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(worstFDRatioDesc,
 				prometheus.GaugeValue, float64(gcounts.WorstFDratio), gname)
 			ch <- prometheus.MustNewConstMetric(cpuUserSecsDesc,
-				prometheus.CounterValue, gcounts.CpuUser, gname)
+				prometheus.CounterValue, gcounts.CpuUserTime, gname)
 			ch <- prometheus.MustNewConstMetric(cpuSystemSecsDesc,
-				prometheus.CounterValue, gcounts.CpuSystem, gname)
+				prometheus.CounterValue, gcounts.CpuSystemTime, gname)
 			ch <- prometheus.MustNewConstMetric(readBytesDesc,
 				prometheus.CounterValue, float64(gcounts.ReadBytes), gname)
 			ch <- prometheus.MustNewConstMetric(writeBytesDesc,

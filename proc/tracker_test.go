@@ -60,7 +60,7 @@ func (s MySuite) TestTrackerCounts(c *C) {
 	tr := NewTracker(false)
 
 	// Test that p1 is seen as new
-	p1 := newProc(1, 1, "p1", ProcMetrics{1, 1.5, 2, 3, 4, 5, 6, 4096, 7, 8, 2})
+	p1 := newProc(1, 1, "p1", ProcMetrics{Counts{}, Memory{7, 8}, Filedesc{4, 4096}, 2})
 	want1 := []ProcIdInfo{p1}
 	got1, _, err := tr.update(procInfoIter(p1))
 	c.Assert(err, IsNil)
@@ -73,7 +73,7 @@ func (s MySuite) TestTrackerCounts(c *C) {
 	c.Check(got2, DeepEquals, []ProcIdInfo(nil))
 
 	// Now update p1's metrics
-	p1.ProcMetrics = ProcMetrics{2, 2.5, 3, 4, 5, 6, 7, 4096, 8, 9, 2}
+	p1.Counts.Add(Counts{1, 1, 1, 1, 1, 1})
 	got3, _, err := tr.update(procInfoIter(p1))
 	c.Assert(err, IsNil)
 	c.Check(got3, DeepEquals, []ProcIdInfo(nil))
@@ -83,13 +83,13 @@ func (s MySuite) TestTrackerCounts(c *C) {
 	c.Check(tr.Tracked[p1.ProcId].info, DeepEquals, ProcInfo{p1.ProcStatic, p1.ProcMetrics})
 
 	// Now update p1's metrics again
-	p1.ProcMetrics = ProcMetrics{4, 5, 6, 8, 9, 10, 11, 4096, 12, 13, 2}
+	p1.Counts.Add(Counts{1, 2, 3, 4, 5, 6})
 	got4, _, err := tr.update(procInfoIter(p1))
 	c.Assert(err, IsNil)
 	c.Check(got4, DeepEquals, []ProcIdInfo(nil))
 
 	// Test that counts are correct
-	c.Check(tr.Tracked[p1.ProcId].accum, Equals, Counts{3, 3.5, 4, 5, 5, 5})
+	c.Check(tr.Tracked[p1.ProcId].accum, Equals, Counts{2, 3, 4, 5, 6, 7})
 	c.Check(tr.Tracked[p1.ProcId].info, DeepEquals, ProcInfo{p1.ProcStatic, p1.ProcMetrics})
 }
 
@@ -116,9 +116,10 @@ func (s MySuite) TestTrackerMissingIo(c *C) {
 		initprocid = procId
 		static, err := procs.GetStatic()
 		c.Assert(err, IsNil)
-		metrics, err := procs.GetMetrics()
+		metrics, softerrs, err := procs.GetMetrics()
 		c.Assert(err, IsNil)
-		c.Assert(metrics.ReadBytes, Equals, int64(-1))
+		c.Check(softerrs, Equals, 1)
+		c.Check(metrics.ReadBytes, Equals, uint64(0))
 		tr.Track("init", ProcIdInfo{procId, static, metrics})
 		break
 	}
@@ -127,7 +128,5 @@ func (s MySuite) TestTrackerMissingIo(c *C) {
 
 	tr.update(fs.AllProcs())
 
-	// Aggregates don't carry forward the -1 for failures, they just
-	// report 0 for those procs whose stats we can't read.
 	c.Assert(tr.Tracked[initprocid].GetStats().aggregate.ReadBytes, Equals, uint64(0))
 }

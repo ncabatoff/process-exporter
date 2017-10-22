@@ -8,25 +8,6 @@ import (
 )
 
 type (
-	Counts struct {
-		CpuUser         float64
-		CpuSystem       float64
-		ReadBytes       uint64
-		WriteBytes      uint64
-		MajorPageFaults uint64
-		MinorPageFaults uint64
-	}
-
-	Memory struct {
-		Resident uint64
-		Virtual  uint64
-	}
-
-	Filedesc struct {
-		Open  int64 // -1 if we don't know
-		Limit uint64
-	}
-
 	// Tracker tracks processes and records metrics.
 	Tracker struct {
 		// Tracked holds the processes are being monitored.  Processes
@@ -71,15 +52,6 @@ type (
 	}
 )
 
-func (c *Counts) Add(c2 Counts) {
-	c.CpuUser += c2.CpuUser
-	c.CpuSystem += c2.CpuSystem
-	c.ReadBytes += c2.ReadBytes
-	c.WriteBytes += c2.WriteBytes
-	c.MajorPageFaults += c2.MajorPageFaults
-	c.MinorPageFaults += c2.MinorPageFaults
-}
-
 func (tp *TrackedProc) GetName() string {
 	return tp.info.Name
 }
@@ -89,13 +61,11 @@ func (tp *TrackedProc) GetCmdLine() []string {
 }
 
 func (tp *TrackedProc) GetStats() trackedStats {
-	mem := Memory{Resident: tp.info.ResidentBytes, Virtual: tp.info.VirtualBytes}
-	fd := Filedesc{Open: tp.info.OpenFDs, Limit: tp.info.MaxFDs}
 	return trackedStats{
 		aggregate:  tp.accum,
 		latest:     tp.lastaccum,
-		Memory:     mem,
-		Filedesc:   fd,
+		Memory:     tp.info.Memory,
+		Filedesc:   tp.info.Filedesc,
 		start:      tp.info.StartTime,
 		numThreads: tp.info.NumThreads,
 	}
@@ -120,24 +90,9 @@ func (t *Tracker) Ignore(id ProcId) {
 
 func updateProc(metrics ProcMetrics, tproc *TrackedProc, updateTime time.Time, cerrs *collectErrors) {
 	// newcounts: resource consumption since last cycle
-	newcounts := Counts{
-		CpuUser:         metrics.CpuUserTime - tproc.info.CpuUserTime,
-		CpuSystem:       metrics.CpuSystemTime - tproc.info.CpuSystemTime,
-		MajorPageFaults: metrics.MajorPageFaults - tproc.info.MajorPageFaults,
-		MinorPageFaults: metrics.MinorPageFaults - tproc.info.MinorPageFaults,
-	}
-	// Counts are also used in Grouper, to track aggregate usage
-	// across groups.  It would be nice to expose that we weren't
-	// able to get some metrics (e.g. due to permissions) but not nice
-	// enough to warrant an extra per-group metric.  Instead we just
-	// report 0 for proc metrics we can't get and increment the global
-	// permissionErrors counter.
-	if metrics.ReadBytes == -1 {
-		cerrs.Permission++
-	} else {
-		newcounts.ReadBytes = uint64(metrics.ReadBytes - tproc.info.ReadBytes)
-		newcounts.WriteBytes = uint64(metrics.WriteBytes - tproc.info.WriteBytes)
-	}
+	newcounts := metrics.Counts
+	newcounts.Sub(tproc.info.Counts)
+
 	tproc.accum.Add(newcounts)
 	tproc.info.ProcMetrics = metrics
 	tproc.lastUpdate = updateTime
@@ -162,16 +117,16 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*ProcIdInfo, coll
 		return nil, cerrs
 	}
 
-	metrics, err := proc.GetMetrics()
+	metrics, softerrors, err := proc.GetMetrics()
 	if err != nil {
 		// This usually happens due to the proc having exited, i.e.
 		// we lost the race.  We don't count that as an error.
-		// If GetMetrics returns
 		if err != ErrProcNotExist {
 			cerrs.Read++
 		}
 		return nil, cerrs
 	}
+	cerrs.Permission += softerrors
 
 	var newProc *ProcIdInfo
 	if known {

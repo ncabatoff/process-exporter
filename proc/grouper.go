@@ -18,9 +18,8 @@ type (
 
 	GroupCounts struct {
 		Counts
-		Procs           int
-		Memresident     uint64
-		Memvirtual      uint64
+		Procs int
+		Memory
 		OldestStartTime time.Time
 		OpenFDs         uint64
 		WorstFDratio    float64
@@ -54,8 +53,8 @@ func (g *Grouper) curgroups() GroupCountMap {
 		cur := gcounts[tinfo.GroupName]
 		cur.Procs++
 		tstats := tinfo.GetStats()
-		cur.Memresident += tstats.Memory.Resident
-		cur.Memvirtual += tstats.Memory.Virtual
+		cur.Memory.ResidentBytes += tstats.Memory.ResidentBytes
+		cur.Memory.VirtualBytes += tstats.Memory.VirtualBytes
 		if tstats.Filedesc.Open != -1 {
 			cur.OpenFDs += uint64(tstats.Filedesc.Open)
 		}

@@ -1,132 +1,133 @@
 package proc
 
 import (
-	. "gopkg.in/check.v1"
+	"testing"
+	"time"
+
+	"github.com/google/go-cmp/cmp"
 )
 
-// Verify that the tracker accurately reports new procs that aren't ignored or tracked.
-func (s MySuite) TestTrackerBasic(c *C) {
-	// create a new proc with zero metrics, cmdline, starttime, ppid
-	newProc := func(pid int, startTime uint64, name string) ProcIdInfo {
-		pis := newProcIdStatic(pid, 0, 0, name, nil)
-		return ProcIdInfo{
-			ProcId:      pis.ProcId,
-			ProcStatic:  pis.ProcStatic,
-			ProcMetrics: ProcMetrics{},
+// Order of updates returned by tracker is not specified.
+func tomap(ps []ProcUpdate) map[ProcUpdate]int {
+	m := make(map[ProcUpdate]int)
+	for _, p := range ps {
+		if _, ok := m[p]; ok {
+			m[p]++
+		} else {
+			m[p] = 1
 		}
 	}
-	tr := NewTracker(false)
-
-	// Test that p1 is seen as new
-	p1 := newProc(1, 1, "p1")
-	want1 := []ProcIdInfo{p1}
-	got1, _, err := tr.update(procInfoIter(want1...))
-	c.Assert(err, IsNil)
-	c.Check(got1, DeepEquals, want1)
-
-	// Test that p1 is no longer seen as new once tracked
-	tr.Track("g1", p1)
-	got2, _, err := tr.update(procInfoIter(want1...))
-	c.Assert(err, IsNil)
-	c.Check(got2, DeepEquals, []ProcIdInfo(nil))
-
-	// Test that p2 is new now, but p1 is still not
-	p2 := newProc(2, 2, "p2")
-	want2 := []ProcIdInfo{p2}
-	got3, _, err := tr.update(procInfoIter(p1, p2))
-	c.Assert(err, IsNil)
-	c.Check(got3, DeepEquals, want2)
-
-	// Test that p2 stops being new once ignored
-	tr.Ignore(p2.ProcId)
-	got4, _, err := tr.update(procInfoIter(p1, p2))
-	c.Assert(err, IsNil)
-	c.Check(got4, DeepEquals, []ProcIdInfo(nil))
-
-	// TODO test that starttime is taken into account, i.e. pid recycling is handled.
+	return m
 }
 
-// Verify that the tracker accurately reports metric changes.
-func (s MySuite) TestTrackerCounts(c *C) {
-	// create a new proc with cmdline, starttime, ppid
-	newProc := func(pid int, startTime uint64, name string, m ProcMetrics) ProcIdInfo {
-		pis := newProcIdStatic(pid, 0, 0, name, nil)
-		return ProcIdInfo{
-			ProcId:      pis.ProcId,
-			ProcStatic:  pis.ProcStatic,
-			ProcMetrics: m,
+// Verify that the tracker finds and tracks or ignores procs based on the
+// namer, and that it can distinguish between two procs with the same pid
+// but different start time.
+func TestTrackerBasic(t *testing.T) {
+	newProc := func(pid int, name string, startTime uint64) ProcIdInfo {
+		pis := newProcIdStatic(pid, 0, startTime, name, nil)
+		return ProcIdInfo{ProcId: pis.ProcId, ProcStatic: pis.ProcStatic}
+	}
+
+	p1, p2, p3 := 1, 2, 3
+	n1, n2, n3, n4 := "g1", "g2", "g3", "g4"
+	t1, t2, t3 := time.Unix(1, 0).UTC(), time.Unix(2, 0).UTC(), time.Unix(3, 0).UTC()
+
+	tests := []struct {
+		procs []ProcIdInfo
+		want  []ProcUpdate
+	}{
+		{
+			[]ProcIdInfo{newProc(p1, n1, 1), newProc(p3, n3, 1)},
+			[]ProcUpdate{{GroupName: n1, Start: t1}},
+		},
+		{
+			// p3 (ignored) has exited and p2 has appeared
+			[]ProcIdInfo{newProc(p1, n1, 1), newProc(p2, n2, 2)},
+			[]ProcUpdate{{GroupName: n1, Start: t1}, {GroupName: n2, Start: t2}},
+		},
+		{
+			// p1 has exited and a new proc with a new name has taken its pid
+			[]ProcIdInfo{newProc(p1, n4, 3), newProc(p2, n2, 2)},
+			[]ProcUpdate{{GroupName: n4, Start: t3}, {GroupName: n2, Start: t2}},
+		},
+	}
+	// Note that n3 should not be tracked according to our namer.
+	tr := NewTracker(newNamer(n1, n2, n4), false)
+
+	for i, tc := range tests {
+		_, got, err := tr.Update(procInfoIter(tc.procs...))
+		noerr(t, err)
+		if diff := cmp.Diff(tomap(got), tomap(tc.want)); diff != "" {
+			t.Errorf("%d: update differs: (-got +want)\n%s", i, diff)
 		}
 	}
-	tr := NewTracker(false)
-
-	// Test that p1 is seen as new
-	p1 := newProc(1, 1, "p1", ProcMetrics{Counts{}, Memory{7, 8}, Filedesc{4, 4096}, 2})
-	want1 := []ProcIdInfo{p1}
-	got1, _, err := tr.update(procInfoIter(p1))
-	c.Assert(err, IsNil)
-	c.Check(got1, DeepEquals, want1)
-
-	// Test that p1 is no longer seen as new once tracked
-	tr.Track("g1", p1)
-	got2, _, err := tr.update(procInfoIter(p1))
-	c.Assert(err, IsNil)
-	c.Check(got2, DeepEquals, []ProcIdInfo(nil))
-
-	// Now update p1's metrics
-	p1.Counts.Add(Counts{1, 1, 1, 1, 1, 1})
-	got3, _, err := tr.update(procInfoIter(p1))
-	c.Assert(err, IsNil)
-	c.Check(got3, DeepEquals, []ProcIdInfo(nil))
-
-	// Test that counts are correct
-	c.Check(tr.Tracked[p1.ProcId].accum, Equals, Counts{1, 1, 1, 1, 1, 1})
-	c.Check(tr.Tracked[p1.ProcId].info, DeepEquals, ProcInfo{p1.ProcStatic, p1.ProcMetrics})
-
-	// Now update p1's metrics again
-	p1.Counts.Add(Counts{1, 2, 3, 4, 5, 6})
-	got4, _, err := tr.update(procInfoIter(p1))
-	c.Assert(err, IsNil)
-	c.Check(got4, DeepEquals, []ProcIdInfo(nil))
-
-	// Test that counts are correct
-	c.Check(tr.Tracked[p1.ProcId].accum, Equals, Counts{2, 3, 4, 5, 6, 7})
-	c.Check(tr.Tracked[p1.ProcId].info, DeepEquals, ProcInfo{p1.ProcStatic, p1.ProcMetrics})
 }
 
-// TestTrackerMissingIo verifies that when I/O stats are unavailable (e.g.
-// due to permissions), the accumulated I/O stats over multiple cycles
-// are always zero.
-// This test fails if pid 1 is owned by the same user running the tests.
-func (s MySuite) TestTrackerMissingIo(c *C) {
-	fs, err := NewFS("/proc")
-	c.Assert(err, IsNil)
-
-	tr := NewTracker(false)
-	procs := fs.AllProcs()
-	var initprocid ProcId
-	for procs.Next() {
-		procId, err := procs.GetProcId()
-		if err != nil {
-			continue
-		}
-		if procId.Pid != 1 {
-			continue
-		}
-
-		initprocid = procId
-		static, err := procs.GetStatic()
-		c.Assert(err, IsNil)
-		metrics, softerrs, err := procs.GetMetrics()
-		c.Assert(err, IsNil)
-		c.Check(softerrs, Equals, 1)
-		c.Check(metrics.ReadBytes, Equals, uint64(0))
-		tr.Track("init", ProcIdInfo{procId, static, metrics})
-		break
+// TestTrackerChildren verifies that when the tracker is asked to track
+// children, processes not selected by the namer are still tracked if
+// they're children of ones that are.
+func TestTrackerChildren(t *testing.T) {
+	newProc := func(pid int, name string, ppid int) ProcIdInfo {
+		pis := newProcIdStatic(pid, ppid, 0, name, nil)
+		return ProcIdInfo{ProcId: pis.ProcId, ProcStatic: pis.ProcStatic}
 	}
-	_, present := tr.Tracked[initprocid]
-	c.Assert(present, Equals, true)
 
-	tr.update(fs.AllProcs())
+	p1, p2, p3 := 1, 2, 3
+	n1, n2, n3 := "g1", "g2", "g3"
+	// In this test everything starts at time t1 for simplicity
+	t1 := time.Unix(0, 0).UTC()
 
-	c.Assert(tr.Tracked[initprocid].GetStats().aggregate.ReadBytes, Equals, uint64(0))
+	tests := []struct {
+		procs []ProcIdInfo
+		want  []ProcUpdate
+	}{
+		{
+			[]ProcIdInfo{newProc(p1, n1, 0), newProc(p2, n2, p1)},
+			[]ProcUpdate{{GroupName: n2, Start: t1}},
+		},
+		{
+			[]ProcIdInfo{newProc(p1, n1, 0), newProc(p2, n2, p1), newProc(p3, n3, p2)},
+			[]ProcUpdate{{GroupName: n2, Start: t1}, {GroupName: n2, Start: t1}},
+		},
+	}
+	// Only n2 and children of n2s should be tracked
+	tr := NewTracker(newNamer(n2), true)
+
+	for i, tc := range tests {
+		_, got, err := tr.Update(procInfoIter(tc.procs...))
+		noerr(t, err)
+		if diff := cmp.Diff(tomap(got), tomap(tc.want)); diff != "" {
+			t.Errorf("%d: update differs: (-got +want)\n%s", i, diff)
+		}
+	}
+}
+
+// TestTrackerMetrics verifies that the updates returned by the tracker
+// match the input we're giving it.
+func TestTrackerMetrics(t *testing.T) {
+	p, n, tm := 1, "g1", time.Unix(0, 0).UTC()
+
+	tests := []struct {
+		proc ProcIdInfo
+		want ProcUpdate
+	}{
+		{
+			piinfo(p, n, Counts{1, 2, 3, 4, 5, 6}, Memory{7, 8}, Filedesc{1, 10}, 9),
+			ProcUpdate{n, Counts{}, Memory{7, 8}, Filedesc{1, 10}, tm, 9},
+		},
+		{
+			piinfo(p, n, Counts{2, 3, 4, 5, 6, 7}, Memory{1, 2}, Filedesc{2, 20}, 1),
+			ProcUpdate{n, Counts{1, 1, 1, 1, 1, 1}, Memory{1, 2}, Filedesc{2, 20}, tm, 1},
+		},
+	}
+	tr := NewTracker(newNamer(n), false)
+
+	for i, tc := range tests {
+		_, got, err := tr.Update(procInfoIter(tc.proc))
+		noerr(t, err)
+		if diff := cmp.Diff(got, []ProcUpdate{tc.want}); diff != "" {
+			t.Errorf("%d: update differs: (-got +want)\n%s", i, diff)
+		}
+	}
 }

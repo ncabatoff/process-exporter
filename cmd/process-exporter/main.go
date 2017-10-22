@@ -343,11 +343,11 @@ func NewProcessCollector(
 		fs:         fs,
 	}
 
-	colErrs, err := p.Update(p.fs.AllProcs())
+	colErrs, _, err := p.Update(p.fs.AllProcs())
 	if err != nil {
 		return nil, err
 	}
-	p.scrapePermissionErrors += colErrs.Permission
+	p.scrapePermissionErrors += colErrs.Partial
 	p.scrapeProcReadErrors += colErrs.Read
 
 	go p.start()
@@ -390,13 +390,13 @@ func (p *NamedProcessCollector) start() {
 }
 
 func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
-	permErrs, err := p.Update(p.fs.AllProcs())
-	p.scrapePermissionErrors += permErrs.Permission
+	permErrs, groups, err := p.Update(p.fs.AllProcs())
+	p.scrapePermissionErrors += permErrs.Partial
 	if err != nil {
 		p.scrapeErrors++
 		log.Printf("error reading procs: %v", err)
 	} else {
-		for gname, gcounts := range p.Groups() {
+		for gname, gcounts := range groups {
 			ch <- prometheus.MustNewConstMetric(numprocsDesc,
 				prometheus.GaugeValue, float64(gcounts.Procs), gname)
 			ch <- prometheus.MustNewConstMetric(membytesDesc,

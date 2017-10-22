@@ -8,15 +8,14 @@ import (
 
 type (
 	Grouper struct {
-		namer common.MatchNamer
 		// track how much was seen last time so we can report the delta
-		GroupStats map[string]Counts
+		groupAccum map[string]Counts
 		tracker    *Tracker
 	}
 
-	GroupCountMap map[string]GroupCounts
+	GroupByName map[string]Group
 
-	GroupCounts struct {
+	Group struct {
 		Counts
 		Procs int
 		Memory
@@ -29,73 +28,61 @@ type (
 
 func NewGrouper(trackChildren bool, namer common.MatchNamer) *Grouper {
 	g := Grouper{
-		namer:      namer,
-		GroupStats: make(map[string]Counts),
-		tracker:    NewTracker(trackChildren),
+		groupAccum: make(map[string]Counts),
+		tracker:    NewTracker(namer, trackChildren),
 	}
 	return &g
 }
 
-func (g *Grouper) Update(iter ProcIter) (collectErrors, error) {
-	return g.tracker.Update(iter, g.namer)
-}
-
-// curgroups returns the aggregate metrics for all curgroups tracked.  This reflects
-// solely what's currently running.
-func (g *Grouper) curgroups() GroupCountMap {
-	gcounts := make(GroupCountMap)
-
+func groupadd(grp Group, ts ProcUpdate) Group {
 	var zeroTime time.Time
-	for _, tinfo := range g.tracker.Tracked {
-		if tinfo == nil {
-			continue
-		}
-		cur := gcounts[tinfo.GroupName]
-		cur.Procs++
-		tstats := tinfo.GetStats()
-		cur.Memory.ResidentBytes += tstats.Memory.ResidentBytes
-		cur.Memory.VirtualBytes += tstats.Memory.VirtualBytes
-		if tstats.Filedesc.Open != -1 {
-			cur.OpenFDs += uint64(tstats.Filedesc.Open)
-		}
-		openratio := float64(tstats.Filedesc.Open) / float64(tstats.Filedesc.Limit)
-		if cur.WorstFDratio < openratio {
-			cur.WorstFDratio = openratio
-		}
-		cur.NumThreads += tstats.numThreads
-		cur.Counts.Add(tstats.latest)
-		if cur.OldestStartTime == zeroTime || tstats.start.Before(cur.OldestStartTime) {
-			cur.OldestStartTime = tstats.start
-		}
-		gcounts[tinfo.GroupName] = cur
+
+	grp.Procs++
+	grp.Memory.ResidentBytes += ts.Memory.ResidentBytes
+	grp.Memory.VirtualBytes += ts.Memory.VirtualBytes
+	if ts.Filedesc.Open != -1 {
+		grp.OpenFDs += uint64(ts.Filedesc.Open)
+	}
+	openratio := float64(ts.Filedesc.Open) / float64(ts.Filedesc.Limit)
+	if grp.WorstFDratio < openratio {
+		grp.WorstFDratio = openratio
+	}
+	grp.NumThreads += ts.NumThreads
+	grp.Counts.Add(ts.Latest)
+	if grp.OldestStartTime == zeroTime || ts.Start.Before(grp.OldestStartTime) {
+		grp.OldestStartTime = ts.Start
 	}
 
-	return gcounts
+	return grp
 }
 
-// Groups returns GroupCounts with Counts that never decrease in value from one
-// call to the next.  Even if processes exit, their CPU and IO contributions up
-// to that point are included in the results.  Even if no processes remain
-// in a group it will still be included in the results.
-func (g *Grouper) Groups() GroupCountMap {
-	groups := g.curgroups()
+func (g *Grouper) Update(iter ProcIter) (CollectErrors, GroupByName, error) {
+	cerrs, tracked, err := g.tracker.Update(iter)
+	if err != nil {
+		return cerrs, nil, err
+	}
+	groups := make(GroupByName)
 
-	// First add any accumulated counts to what was just observed,
+	for _, update := range tracked {
+		groups[update.GroupName] = groupadd(groups[update.GroupName], update)
+	}
+
+	// Add any accumulated counts to what was just observed,
 	// and update the accumulators.
 	for gname, group := range groups {
-		if oldcounts, ok := g.GroupStats[gname]; ok {
+		if oldcounts, ok := g.groupAccum[gname]; ok {
 			group.Counts.Add(oldcounts)
 		}
-		g.GroupStats[gname] = group.Counts
+		g.groupAccum[gname] = group.Counts
 		groups[gname] = group
 	}
 
 	// Now add any groups that were observed in the past but aren't running now.
-	for gname, gcounts := range g.GroupStats {
+	for gname, gcounts := range g.groupAccum {
 		if _, ok := groups[gname]; !ok {
-			groups[gname] = GroupCounts{Counts: gcounts}
+			groups[gname] = Group{Counts: gcounts}
 		}
 	}
 
-	return groups
+	return cerrs, groups, nil
 }

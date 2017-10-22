@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"testing"
 	"time"
 
-	. "gopkg.in/check.v1"
+	"github.com/google/go-cmp/cmp"
 )
 
 type (
@@ -36,47 +37,71 @@ func allprocs(procpath string) ProcIter {
 	return fs.AllProcs()
 }
 
-func (s MySuite) TestReadFixture(c *C) {
+func TestReadFixture(t *testing.T) {
 	procs := allprocs("../fixtures")
+	var pii ProcIdInfo
+
 	count := 0
 	for procs.Next() {
 		count++
-		c.Assert(count, Equals, 1)
-
-		c.Check(procs.GetPid(), Equals, 14804)
-
-		procid, err := procs.GetProcId()
-		c.Assert(err, IsNil)
-		c.Check(procid, Equals, ProcId{Pid: 14804, StartTimeRel: 0x4f27b})
-
-		static, err := procs.GetStatic()
-		c.Assert(err, IsNil)
-		c.Check(static.Name, Equals, "process-exporte")
-		c.Check(static.Cmdline, DeepEquals, []string{"./process-exporter", "-procnames", "bash"})
-		c.Check(static.ParentPid, Equals, 10884)
-		c.Check(static.StartTime.UTC().Format(time.RFC3339), Equals, "2017-10-19T22:52:51Z")
-
-		metrics, softerrs, err := procs.GetMetrics()
-		c.Assert(err, IsNil)
-		c.Assert(softerrs, Equals, 0)
-		c.Check(metrics.CpuUserTime, Equals, 0.1)
-		c.Check(metrics.CpuSystemTime, Equals, 0.04)
-		c.Check(metrics.ReadBytes, Equals, uint64(1814455))
-		c.Check(metrics.WriteBytes, Equals, uint64(0))
-		c.Check(metrics.ResidentBytes, Equals, uint64(0x7b1000))
-		c.Check(metrics.VirtualBytes, Equals, uint64(0x1061000))
-		c.Check(metrics.Filedesc, Equals, Filedesc{5, 0x400})
-		c.Check(metrics.MajorPageFaults, Equals, uint64(0x2ff))
-		c.Check(metrics.MinorPageFaults, Equals, uint64(0x643))
-		c.Check(metrics.NumThreads, Equals, uint64(7))
+		var err error
+		pii, err = Info(procs)
+		noerr(t, err)
 	}
 	err := procs.Close()
-	c.Assert(err, IsNil)
-	c.Check(count, Not(Equals), 0)
+	noerr(t, err)
+	if count != 1 {
+		t.Fatalf("got %d procs, want 1", count)
+	}
+
+	wantprocid := ProcId{Pid: 14804, StartTimeRel: 0x4f27b}
+	if diff := cmp.Diff(pii.ProcId, wantprocid); diff != "" {
+		t.Errorf("procid differs: (-got +want)\n%s", diff)
+	}
+
+	stime, _ := time.Parse(time.RFC3339Nano, "2017-10-19T22:52:51.19Z")
+	wantstatic := ProcStatic{
+		Name:      "process-exporte",
+		Cmdline:   []string{"./process-exporter", "-procnames", "bash"},
+		ParentPid: 10884,
+		StartTime: stime,
+	}
+	if diff := cmp.Diff(pii.ProcStatic, wantstatic); diff != "" {
+		t.Errorf("static differs: (-got +want)\n%s", diff)
+	}
+
+	wantmetrics := ProcMetrics{
+		Counts: Counts{
+			CpuUserTime:     0.1,
+			CpuSystemTime:   0.04,
+			ReadBytes:       1814455,
+			WriteBytes:      0,
+			MajorPageFaults: 0x2ff,
+			MinorPageFaults: 0x643,
+		},
+		Memory: Memory{
+			ResidentBytes: 0x7b1000,
+			VirtualBytes:  0x1061000,
+		},
+		Filedesc: Filedesc{
+			Open:  5,
+			Limit: 0x400,
+		},
+		NumThreads: 7,
+	}
+	if diff := cmp.Diff(pii.ProcMetrics, wantmetrics); diff != "" {
+		t.Errorf("metrics differs: (-got +want)\n%s", diff)
+	}
+}
+
+func noerr(t *testing.T, err error) {
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
 }
 
 // Basic test of proc reading: does AllProcs return at least two procs, one of which is us.
-func (s MySuite) TestAllProcs(c *C) {
+func TestAllProcs(t *testing.T) {
 	procs := allprocs("/proc")
 	count := 0
 	for procs.Next() {
@@ -85,40 +110,57 @@ func (s MySuite) TestAllProcs(c *C) {
 			continue
 		}
 		procid, err := procs.GetProcId()
-		c.Assert(err, IsNil)
-		c.Check(procid.Pid, Equals, os.Getpid())
+		noerr(t, err)
+		if procid.Pid != os.Getpid() {
+			t.Errorf("got %d, want %d", procid.Pid, os.Getpid())
+		}
 		static, err := procs.GetStatic()
-		c.Assert(err, IsNil)
-		c.Check(static.ParentPid, Equals, os.Getppid())
+		noerr(t, err)
+		if static.ParentPid != os.Getppid() {
+			t.Errorf("got %d, want %d", static.ParentPid, os.Getppid())
+		}
 	}
 	err := procs.Close()
-	c.Assert(err, IsNil)
-	c.Check(count, Not(Equals), 0)
+	noerr(t, err)
+	if count == 0 {
+		t.Errorf("got %d, want 0", count)
+	}
 }
 
 // Verify that pid 1 doesn't provide I/O or FD stats.  This test
 // fails if pid 1 is owned by the same user running the tests.
-func (s MySuite) TestMissingIo(c *C) {
+func TestMissingIo(t *testing.T) {
 	procs := allprocs("/proc")
 	for procs.Next() {
 		if procs.GetPid() != 1 {
 			continue
 		}
 		met, softerrs, err := procs.GetMetrics()
-		c.Assert(err, IsNil)
-		c.Assert(softerrs, Equals, 1)
-		c.Check(met.ReadBytes, Equals, uint64(0))
-		c.Check(met.WriteBytes, Equals, uint64(0))
-		c.Check(met.ResidentBytes, Not(Equals), 0)
-		c.Check(met.Filedesc.Limit, Not(Equals), 0)
+		noerr(t, err)
+
+		if softerrs != 1 {
+			t.Errorf("got %d, want %d", softerrs, 1)
+		}
+		if met.ReadBytes != uint64(0) {
+			t.Errorf("got %d, want %d", met.ReadBytes, 0)
+		}
+		if met.WriteBytes != uint64(0) {
+			t.Errorf("got %d, want %d", met.WriteBytes, 0)
+		}
+		if met.ResidentBytes == uint64(0) {
+			t.Errorf("got %d, want non-zero", met.ResidentBytes)
+		}
+		if met.Filedesc.Limit == uint64(0) {
+			t.Errorf("got %d, want non-zero", met.Filedesc.Limit)
+		}
 		return
 	}
 }
 
 // Test that we can observe the absence of a child process before it spawns and after it exits,
 // and its presence during its lifetime.
-func (s MySuite) TestAllProcsSpawn(c *C) {
-	childprocs := func() ([]ProcIdStatic, error) {
+func TestAllProcsSpawn(t *testing.T) {
+	childprocs := func() []ProcIdStatic {
 		found := []ProcIdStatic{}
 		procs := allprocs("/proc")
 		mypid := os.Getpid()
@@ -137,30 +179,10 @@ func (s MySuite) TestAllProcsSpawn(c *C) {
 		}
 		err := procs.Close()
 		if err != nil {
-			return nil, err
+			t.Fatalf("error closing procs iterator: %v", err)
 		}
-		return found, nil
+		return found
 	}
-
-	children1, err := childprocs()
-	c.Assert(err, IsNil)
-
-	cmd := exec.Command("/bin/cat")
-	wc, err := cmd.StdinPipe()
-	c.Assert(err, IsNil)
-	err = cmd.Start()
-	c.Assert(err, IsNil)
-
-	children2, err := childprocs()
-	c.Assert(err, IsNil)
-
-	err = wc.Close()
-	c.Assert(err, IsNil)
-	err = cmd.Wait()
-	c.Assert(err, IsNil)
-
-	children3, err := childprocs()
-	c.Assert(err, IsNil)
 
 	foundcat := func(procs []ProcIdStatic) bool {
 		for _, proc := range procs {
@@ -171,32 +193,38 @@ func (s MySuite) TestAllProcsSpawn(c *C) {
 		return false
 	}
 
-	c.Check(foundcat(children1), Equals, false)
-	c.Check(foundcat(children2), Equals, true)
-	c.Check(foundcat(children3), Equals, false)
+	if foundcat(childprocs()) {
+		t.Errorf("found cat before spawning it")
+	}
+
+	cmd := exec.Command("/bin/cat")
+	wc, err := cmd.StdinPipe()
+	noerr(t, err)
+	err = cmd.Start()
+	noerr(t, err)
+
+	if !foundcat(childprocs()) {
+		t.Errorf("didn't find cat after spawning it")
+	}
+
+	err = wc.Close()
+	noerr(t, err)
+	err = cmd.Wait()
+	noerr(t, err)
+
+	if foundcat(childprocs()) {
+		t.Errorf("found cat after exit")
+	}
 }
 
-func (s MySuite) TestIterator(c *C) {
-	// create a new proc with zero metrics, cmdline, starttime, ppid
-	newProc := func(pid int, name string) ProcIdInfo {
-		pis := newProcIdStatic(pid, 0, 0, name, nil)
-		return ProcIdInfo{
-			ProcId:      pis.ProcId,
-			ProcStatic:  pis.ProcStatic,
-			ProcMetrics: ProcMetrics{},
-		}
+func TestIterator(t *testing.T) {
+	p1 := newProc(1, "p1", ProcMetrics{})
+	p2 := newProc(2, "p2", ProcMetrics{})
+	want := []ProcIdInfo{p1, p2}
+	pis := procInfoIter(want...)
+	got, err := consumeIter(pis)
+	noerr(t, err)
+	if diff := cmp.Diff(got, want); diff != "" {
+		t.Errorf("procs differs: (-got +want)\n%s", diff)
 	}
-	p1 := newProc(1, "p1")
-	want1 := []ProcIdInfo{p1}
-	pi1 := procInfoIter(want1...)
-	got, err := consumeIter(pi1)
-	c.Assert(err, IsNil)
-	c.Check(got, DeepEquals, want1)
-
-	p2 := newProc(2, "p2")
-	want2 := []ProcIdInfo{p1, p2}
-	pi2 := procInfoIter(want2...)
-	got2, err := consumeIter(pi2)
-	c.Assert(err, IsNil)
-	c.Check(got2, DeepEquals, want2)
 }

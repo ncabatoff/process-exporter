@@ -13,7 +13,10 @@ import (
 var ErrProcNotExist = fmt.Errorf("process does not exist")
 
 func newProcIdStatic(pid, ppid int, startTime uint64, name string, cmdline []string) ProcIdStatic {
-	return ProcIdStatic{ProcId{pid, startTime}, ProcStatic{name, cmdline, ppid, time.Time{}}}
+	return ProcIdStatic{
+		ProcId{pid, startTime},
+		ProcStatic{name, cmdline, ppid, time.Unix(int64(startTime), 0).UTC()},
+	}
 }
 
 type (
@@ -281,7 +284,7 @@ func (p *proccache) GetStatic() (ProcStatic, error) {
 	if err != nil {
 		return ProcStatic{}, err
 	}
-	startTime := time.Unix(p.fs.BootTime, 0)
+	startTime := time.Unix(p.fs.BootTime, 0).UTC()
 	startTime = startTime.Add(time.Second / userHZ * time.Duration(stat.Starttime))
 	return ProcStatic{
 		Name:      stat.Comm,
@@ -318,7 +321,7 @@ func (p proc) GetCounts() (Counts, int, error) {
 // GetMetrics returns the current metrics for the proc.  The results are
 // not cached.
 func (p proc) GetMetrics() (ProcMetrics, int, error) {
-	common, softerrors, err := p.GetCounts()
+	counts, softerrors, err := p.GetCounts()
 	if err != nil {
 		return ProcMetrics{}, 0, err
 	}
@@ -334,12 +337,14 @@ func (p proc) GetMetrics() (ProcMetrics, int, error) {
 		numfds = -1
 		softerrors |= 1
 	}
-	limits, err := p.NewLimits()
+
+	limits, err := p.Proc.NewLimits()
 	if err != nil {
 		return ProcMetrics{}, 0, err
 	}
+
 	return ProcMetrics{
-		Counts: common,
+		Counts: counts,
 		Memory: Memory{
 			ResidentBytes: uint64(stat.ResidentMemory()),
 			VirtualBytes:  uint64(stat.VirtualMemory()),

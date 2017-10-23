@@ -21,7 +21,7 @@ func procinfo(p Proc) (IDInfo, error) {
 	if err != nil {
 		return IDInfo{}, err
 	}
-	return IDInfo{id, static, metrics}, nil
+	return IDInfo{id, static, metrics, nil}, nil
 }
 
 // read everything in the iterator
@@ -61,15 +61,15 @@ func newProcIDStatic(pid, ppid int, startTime uint64, name string, cmdline []str
 
 func newProc(pid int, name string, m Metrics) IDInfo {
 	id, static := newProcIDStatic(pid, 0, 0, name, nil)
-	return IDInfo{id, static, m}
+	return IDInfo{id, static, m, nil}
 }
 
 func newProcStart(pid int, name string, startTime uint64) IDInfo {
 	id, static := newProcIDStatic(pid, 0, startTime, name, nil)
-	return IDInfo{id, static, Metrics{}}
+	return IDInfo{id, static, Metrics{}, nil}
 }
 
 func newProcParent(pid int, name string, ppid int) IDInfo {
 	id, static := newProcIDStatic(pid, ppid, 0, name, nil)
-	return IDInfo{id, static, Metrics{}}
+	return IDInfo{id, static, Metrics{}, nil}
 }

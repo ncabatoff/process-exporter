@@ -24,6 +24,8 @@ type (
 		StartTimeRel uint64
 	}
 
+	ThreadID ID
+
 	// Static contains data read from /proc/pid/*
 	Static struct {
 		Name      string
@@ -66,6 +68,7 @@ type (
 
 	// Thread contains the name and counts for a thread.
 	Thread struct {
+		ThreadID
 		ThreadName string
 		Counts
 	}
@@ -75,6 +78,8 @@ type (
 		ID
 		Static
 		Metrics
+		// TODO: make this more optional
+		Threads []Thread
 	}
 
 	// ProcIdInfoThreads struct {
@@ -99,7 +104,7 @@ type (
 		// and 0 on complete success, 1 if some (like I/O) couldn't be read.
 		GetMetrics() (Metrics, int, error)
 		GetCounts() (Counts, int, error)
-		// GetThreads() ([]ProcThread, error)
+		GetThreads() ([]Thread, error)
 	}
 
 	// proccache implements the Proc interface by acting as wrapper for procfs.Proc
@@ -168,7 +173,7 @@ type (
 )
 
 // Add adds c2 to the counts.
-func (c *Counts) Add(c2 Counts) {
+func (c *Counts) Add(c2 Delta) {
 	c.CPUUserTime += c2.CPUUserTime
 	c.CPUSystemTime += c2.CPUSystemTime
 	c.ReadBytes += c2.ReadBytes
@@ -178,18 +183,19 @@ func (c *Counts) Add(c2 Counts) {
 }
 
 // Sub subtracts c2 from the counts.
-func (c *Counts) Sub(c2 Counts) {
+func (c Counts) Sub(c2 Counts) Delta {
 	c.CPUUserTime -= c2.CPUUserTime
 	c.CPUSystemTime -= c2.CPUSystemTime
 	c.ReadBytes -= c2.ReadBytes
 	c.WriteBytes -= c2.WriteBytes
 	c.MajorPageFaults -= c2.MajorPageFaults
 	c.MinorPageFaults -= c2.MinorPageFaults
+	return Delta(c)
 }
 
-//func (p ProcIdInfoThreads) GetThreads() ([]ProcThread, error) {
-//	return p.Threads, nil
-//}
+func (p IDInfo) GetThreads() ([]Thread, error) {
+	return p.Threads, nil
+}
 
 // GetPid implements Proc.
 func (p IDInfo) GetPid() int {
@@ -361,17 +367,26 @@ func (p proc) GetThreads() ([]Thread, error) {
 	threads := []Thread{}
 	iter := fs.AllProcs()
 	for iter.Next() {
+		var id ID
+		id, err = iter.GetProcID()
+		if err != nil {
+			continue
+		}
+
 		var static Static
 		static, err = iter.GetStatic()
 		if err != nil {
 			continue
 		}
+
 		var counts Counts
 		counts, _, err = iter.GetCounts()
 		if err != nil {
 			continue
 		}
+
 		threads = append(threads, Thread{
+			ThreadID:   ThreadID(id),
 			ThreadName: static.Name,
 			Counts:     counts,
 		})
@@ -379,6 +394,9 @@ func (p proc) GetThreads() ([]Thread, error) {
 	err = iter.Close()
 	if err != nil {
 		return nil, err
+	}
+	if len(threads) < 2 {
+		return nil, nil
 	}
 
 	return threads, nil

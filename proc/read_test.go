@@ -119,6 +119,19 @@ func TestAllProcs(t *testing.T) {
 		if static.ParentPid != os.Getppid() {
 			t.Errorf("got %d, want %d", static.ParentPid, os.Getppid())
 		}
+		metrics, _, err := procs.GetMetrics()
+		noerr(t, err)
+		if metrics.ResidentBytes == 0 {
+			t.Errorf("got 0 bytes resident, want nonzero")
+		}
+		// All Go programs have multiple threads.
+		if metrics.NumThreads < 2 {
+			t.Errorf("got %d threads, want >1", metrics.NumThreads)
+		}
+		threads, err := procs.GetThreads()
+		if len(threads) < 2 {
+			t.Errorf("got %d thread details, want >1", len(threads))
+		}
 	}
 	err := procs.Close()
 	noerr(t, err)
@@ -174,7 +187,7 @@ func TestAllProcsSpawn(t *testing.T) {
 				continue
 			}
 			if static.ParentPid == mypid {
-				found = append(found, IDInfo{procid, static, Metrics{}})
+				found = append(found, IDInfo{procid, static, Metrics{}, nil})
 			}
 		}
 		err := procs.Close()

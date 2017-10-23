@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/fatih/structs"
 	common "github.com/ncabatoff/process-exporter"
 )
 
@@ -22,6 +23,19 @@ type (
 		// trackChildren makes Tracker track descendants of procs the
 		// namer wanted tracked.
 		trackChildren bool
+		// trackThreads makes Tracker track per-thread metrics.
+		trackThreads bool
+	}
+
+	// Delta is an alias of Counts used to signal that its contents are not
+	// totals, but rather the result of subtracting two totals.
+	Delta Counts
+
+	trackedThread struct {
+		name       string
+		accum      Counts
+		latest     Delta
+		lastUpdate time.Time
 	}
 
 	// trackedProc accumulates metrics for a process, as well as
@@ -33,19 +47,37 @@ type (
 		static  Static
 		metrics Metrics
 		// lastaccum is the increment to the counters seen in the last update.
-		lastaccum Counts
+		lastaccum Delta
 		// groupName is the tag for this proc given by the namer.
 		groupName string
+		threads   map[ThreadID]trackedThread
+	}
+
+	// ThreadUpdate describes what's changed for a thread since the last cycle.
+	ThreadUpdate struct {
+		// ThreadName is the name of the thread based on field of stat.
+		ThreadName string
+		// Latest is how much the counts increased since last cycle.
+		Latest Delta
 	}
 
 	// Update reports on the latest stats for a process.
 	Update struct {
+		// GroupName is the name given by the namer to the process.
 		GroupName string
-		Latest    Counts
+		// Latest is how much the counts increased since last cycle.
+		Latest Delta
+		// Memory is the current memory usage.
 		Memory
+		// Filedesc is the current fd usage/limit.
 		Filedesc
-		Start      time.Time
+		// Start is the time the process started.
+		Start time.Time
+		// NumThreads is the number of threads.
 		NumThreads uint64
+		// Threads are the thread updates for this process, if the Tracker
+		// has trackThreads==true.
+		Threads []ThreadUpdate
 	}
 
 	// CollectErrors describes non-fatal errors found while collecting proc
@@ -62,8 +94,45 @@ type (
 	}
 )
 
+func lessThreadUpdate(x, y ThreadUpdate) bool {
+	if x.ThreadName > y.ThreadName {
+		return false
+	}
+	if x.ThreadName < y.ThreadName {
+		return true
+	}
+	return lessCounts(Counts(x.Latest), Counts(y.Latest))
+}
+
+func lessCounts(x, y Counts) bool {
+	xvs, yvs := structs.New(x).Values(), structs.New(y).Values()
+	for i, xi := range xvs {
+		switch xv := xi.(type) {
+		case float64:
+			yv := yvs[i].(float64)
+			if xv < yv {
+				return true
+			} else if xv > yv {
+				return false
+			}
+
+		case uint64:
+			yv := yvs[i].(uint64)
+			if xv < yv {
+				return true
+			} else if xv > yv {
+				return false
+			}
+
+		default:
+			panic("only know how to handle uint64 and float64")
+		}
+	}
+	return false
+}
+
 func (tp *trackedProc) getUpdate() Update {
-	return Update{
+	u := Update{
 		GroupName:  tp.groupName,
 		Latest:     tp.lastaccum,
 		Memory:     tp.metrics.Memory,
@@ -71,38 +140,70 @@ func (tp *trackedProc) getUpdate() Update {
 		Start:      tp.static.StartTime,
 		NumThreads: tp.metrics.NumThreads,
 	}
+	if len(tp.threads) > 1 {
+		for _, tt := range tp.threads {
+			u.Threads = append(u.Threads, ThreadUpdate{tt.name, tt.latest})
+		}
+	}
+	return u
 }
 
 // NewTracker creates a Tracker.
-func NewTracker(namer common.MatchNamer, trackChildren bool) *Tracker {
+func NewTracker(namer common.MatchNamer, trackChildren, trackThreads bool) *Tracker {
 	return &Tracker{
 		namer:         namer,
 		tracked:       make(map[ID]*trackedProc),
 		procIds:       make(map[int]ID),
 		trackChildren: trackChildren,
+		trackThreads:  trackThreads,
 	}
 }
 
 func (t *Tracker) track(groupName string, idinfo IDInfo) {
-	t.tracked[idinfo.ID] = &trackedProc{
+	tproc := trackedProc{
 		groupName: groupName,
 		static:    idinfo.Static,
 		metrics:   idinfo.Metrics,
 	}
+	if len(idinfo.Threads) > 0 {
+		tproc.threads = make(map[ThreadID]trackedThread)
+		for _, thr := range idinfo.Threads {
+			tproc.threads[thr.ThreadID] = trackedThread{
+				thr.ThreadName, thr.Counts, Delta{}, time.Time{}}
+		}
+	}
+	t.tracked[idinfo.ID] = &tproc
 }
 
 func (t *Tracker) ignore(id ID) {
 	t.tracked[id] = nil
 }
 
-func updateProc(metrics Metrics, tproc *trackedProc, updateTime time.Time, cerrs *CollectErrors) {
+func (tp *trackedProc) update(metrics Metrics, now time.Time, cerrs *CollectErrors, threads []Thread) {
 	// newcounts: resource consumption since last cycle
 	newcounts := metrics.Counts
-	newcounts.Sub(tproc.metrics.Counts)
-
-	tproc.metrics = metrics
-	tproc.lastUpdate = updateTime
-	tproc.lastaccum = newcounts
+	tp.lastaccum = newcounts.Sub(tp.metrics.Counts)
+	tp.metrics = metrics
+	tp.lastUpdate = now
+	if len(threads) > 1 {
+		if tp.threads == nil {
+			tp.threads = make(map[ThreadID]trackedThread)
+		}
+		for _, thr := range threads {
+			tt := trackedThread{thr.ThreadName, thr.Counts, Delta{}, now}
+			if old, ok := tp.threads[thr.ThreadID]; ok {
+				tt.latest, tt.accum = thr.Counts.Sub(old.accum), thr.Counts
+			}
+			tp.threads[thr.ThreadID] = tt
+		}
+		for id, tt := range tp.threads {
+			if tt.lastUpdate != now {
+				delete(tp.threads, id)
+			}
+		}
+	} else {
+		tp.threads = nil
+	}
 }
 
 // handleProc updates the tracker if it's a known and not ignored proc.
@@ -134,15 +235,19 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 	}
 	cerrs.Partial += softerrors
 
+	var threads []Thread
+	if t.trackThreads {
+		threads, _ = proc.GetThreads()
+	}
 	var newProc *IDInfo
 	if known {
-		updateProc(metrics, last, updateTime, &cerrs)
+		last.update(metrics, updateTime, &cerrs, threads)
 	} else {
 		static, err := proc.GetStatic()
 		if err != nil {
 			return nil, cerrs
 		}
-		newProc = &IDInfo{procID, static, metrics}
+		newProc = &IDInfo{procID, static, metrics, threads}
 
 		// Is this a new process with the same pid as one we already know?
 		// Then delete it from the known map, otherwise the cleanup in Update()
@@ -157,7 +262,7 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 
 // update scans procs and updates metrics for those which are tracked. Processes
 // that have gone away get removed from the Tracked map. New processes are
-// returned, along with the count of permission errors.
+// returned, along with the count of nonfatal errors.
 func (t *Tracker) update(procs Iter) ([]IDInfo, CollectErrors, error) {
 	var newProcs []IDInfo
 	var colErrs CollectErrors
@@ -235,9 +340,10 @@ func (t *Tracker) checkAncestry(idinfo IDInfo, newprocs map[ID]IDInfo) string {
 	return ""
 }
 
-// Update tracks any new procs that should be according to policy, and updates
-// the metrics for already tracked procs.  Permission errors are returned as a
-// count, and will not affect the error return value.
+// Update modifies the tracker's internal state based on what it reads from
+// iter.  Tracks any new procs the namer wants tracked, and updates
+// its metrics for existing tracked procs.  Returns nonfatal errors
+// and the status of all tracked procs, or an error if fatal.
 func (t *Tracker) Update(iter Iter) (CollectErrors, []Update, error) {
 	newProcs, colErrs, err := t.update(iter)
 	if err != nil {

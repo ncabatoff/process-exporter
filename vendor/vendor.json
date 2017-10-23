@@ -9,6 +9,12 @@
 			"revisionTime": "2015-02-23T13:51:52Z"
 		},
 		{
+			"checksumSHA1": "qZyFDqCcFNWkoM6DPSrBzmTOOkc=",
+			"path": "github.com/fatih/structs",
+			"revision": "f5faa72e73092639913f5833b75e1ac1d6bc7a63",
+			"revisionTime": "2017-10-20T06:48:19Z"
+		},
+		{
 			"checksumSHA1": "7kHC8QJD74DCyQRYTxVP5AC4m2k=",
 			"path": "github.com/golang/protobuf/proto",
 			"revision": "1f49d83d9aa00e6ce4fc8258c71cc7786aec968a",

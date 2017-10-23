@@ -96,6 +96,18 @@ var (
 		[]string{"groupname"},
 		nil)
 
+	majorPageFaultsDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_major_page_faults_total",
+		"Major page faults",
+		[]string{"groupname"},
+		nil)
+
+	minorPageFaultsDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_minor_page_faults_total",
+		"Minor page faults",
+		[]string{"groupname"},
+		nil)
+
 	membytesDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_memory_bytes",
 		"number of bytes of memory in use",
@@ -120,21 +132,9 @@ var (
 		[]string{"groupname"},
 		nil)
 
-	majorPageFaultsDesc = prometheus.NewDesc(
-		"namedprocess_namegroup_major_page_faults_total",
-		"Major page faults",
-		[]string{"groupname"},
-		nil)
-
 	numThreadsDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_num_threads",
 		"Number of threads",
-		[]string{"groupname"},
-		nil)
-
-	minorPageFaultsDesc = prometheus.NewDesc(
-		"namedprocess_namegroup_minor_page_faults_total",
-		"Minor page faults",
 		[]string{"groupname"},
 		nil)
 
@@ -150,10 +150,40 @@ var (
 		nil,
 		nil)
 
-	scrapePermissionErrorsDesc = prometheus.NewDesc(
-		"namedprocess_scrape_permission_errors",
+	scrapePartialErrorsDesc = prometheus.NewDesc(
+		"namedprocess_scrape_partial_errors",
 		"incremented each time a tracked proc's metrics collection fails partially, e.g. unreadable I/O stats",
 		nil,
+		nil)
+
+	threadCountDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_thread_count",
+		"Number of threads in this group with same threadname",
+		[]string{"groupname", "threadname"},
+		nil)
+
+	threadCpuSecsDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_thread_cpu_seconds_total",
+		"Cpu user/system usage in seconds",
+		[]string{"groupname", "threadname", "cpumode"},
+		nil)
+
+	threadIoBytesDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_thread_io_bytes_total",
+		"number of bytes read/written by these threads",
+		[]string{"groupname", "threadname", "iomode"},
+		nil)
+
+	threadMajorPageFaultsDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_thread_major_page_faults_total",
+		"Major page faults for these threads",
+		[]string{"groupname", "threadname"},
+		nil)
+
+	threadMinorPageFaultsDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_thread_minor_page_faults_total",
+		"Minor page faults for these threads",
+		[]string{"groupname", "threadname"},
 		nil)
 )
 
@@ -234,6 +264,8 @@ func main() {
 			"comma-seperated list, alternating process name and capturing regex to apply to cmdline")
 		children = flag.Bool("children", true,
 			"if a proc is tracked, track with it any children that aren't part of their own group")
+		threads = flag.Bool("threads", false,
+			"report on per-threadname metrics as well")
 		man = flag.Bool("man", false,
 			"print manual")
 		configPath = flag.String("config.path", "",
@@ -279,7 +311,7 @@ func main() {
 		matchnamer = namemapper
 	}
 
-	pc, err := NewProcessCollector(*procfsPath, *children, matchnamer)
+	pc, err := NewProcessCollector(*procfsPath, *children, *threads, matchnamer)
 	if err != nil {
 		log.Fatalf("Error initializing: %v", err)
 	}
@@ -321,16 +353,18 @@ type (
 	NamedProcessCollector struct {
 		scrapeChan chan scrapeRequest
 		*proc.Grouper
-		source                 proc.Source
-		scrapeErrors           int
-		scrapeProcReadErrors   int
-		scrapePermissionErrors int
+		threads              bool
+		source               proc.Source
+		scrapeErrors         int
+		scrapeProcReadErrors int
+		scrapePartialErrors  int
 	}
 )
 
 func NewProcessCollector(
 	procfsPath string,
 	children bool,
+	threads bool,
 	n common.MatchNamer,
 ) (*NamedProcessCollector, error) {
 	fs, err := proc.NewFS(procfsPath)
@@ -339,15 +373,16 @@ func NewProcessCollector(
 	}
 	p := &NamedProcessCollector{
 		scrapeChan: make(chan scrapeRequest),
-		Grouper:    proc.NewGrouper(children, n),
+		Grouper:    proc.NewGrouper(n, children, threads),
 		source:     fs,
+		threads:    threads,
 	}
 
 	colErrs, _, err := p.Update(p.source.AllProcs())
 	if err != nil {
 		return nil, err
 	}
-	p.scrapePermissionErrors += colErrs.Partial
+	p.scrapePartialErrors += colErrs.Partial
 	p.scrapeProcReadErrors += colErrs.Read
 
 	go p.start()
@@ -371,7 +406,12 @@ func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- numThreadsDesc
 	ch <- scrapeErrorsDesc
 	ch <- scrapeProcReadErrorsDesc
-	ch <- scrapePermissionErrorsDesc
+	ch <- scrapePartialErrorsDesc
+	ch <- threadCountDesc
+	ch <- threadCpuSecsDesc
+	ch <- threadIoBytesDesc
+	ch <- threadMajorPageFaultsDesc
+	ch <- threadMinorPageFaultsDesc
 }
 
 // Collect implements prometheus.Collector.
@@ -391,7 +431,7 @@ func (p *NamedProcessCollector) start() {
 
 func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 	permErrs, groups, err := p.Update(p.source.AllProcs())
-	p.scrapePermissionErrors += permErrs.Partial
+	p.scrapePartialErrors += permErrs.Partial
 	if err != nil {
 		p.scrapeErrors++
 		log.Printf("error reading procs: %v", err)
@@ -423,12 +463,37 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 				prometheus.CounterValue, float64(gcounts.MinorPageFaults), gname)
 			ch <- prometheus.MustNewConstMetric(numThreadsDesc,
 				prometheus.GaugeValue, float64(gcounts.NumThreads), gname)
+			if p.threads {
+				for _, thr := range gcounts.Threads {
+					ch <- prometheus.MustNewConstMetric(threadCountDesc,
+						prometheus.GaugeValue, float64(thr.NumThreads),
+						gname, thr.Name)
+					ch <- prometheus.MustNewConstMetric(threadCpuSecsDesc,
+						prometheus.CounterValue, float64(thr.CPUUserTime),
+						gname, thr.Name, "user")
+					ch <- prometheus.MustNewConstMetric(threadCpuSecsDesc,
+						prometheus.CounterValue, float64(thr.CPUSystemTime),
+						gname, thr.Name, "system")
+					ch <- prometheus.MustNewConstMetric(threadIoBytesDesc,
+						prometheus.CounterValue, float64(thr.ReadBytes),
+						gname, thr.Name, "read")
+					ch <- prometheus.MustNewConstMetric(threadIoBytesDesc,
+						prometheus.CounterValue, float64(thr.WriteBytes),
+						gname, thr.Name, "write")
+					ch <- prometheus.MustNewConstMetric(threadMajorPageFaultsDesc,
+						prometheus.CounterValue, float64(thr.MajorPageFaults),
+						gname, thr.Name)
+					ch <- prometheus.MustNewConstMetric(threadMinorPageFaultsDesc,
+						prometheus.CounterValue, float64(thr.MinorPageFaults),
+						gname, thr.Name)
+				}
+			}
 		}
 	}
 	ch <- prometheus.MustNewConstMetric(scrapeErrorsDesc,
 		prometheus.CounterValue, float64(p.scrapeErrors))
 	ch <- prometheus.MustNewConstMetric(scrapeProcReadErrorsDesc,
 		prometheus.CounterValue, float64(p.scrapeProcReadErrors))
-	ch <- prometheus.MustNewConstMetric(scrapePermissionErrorsDesc,
-		prometheus.CounterValue, float64(p.scrapePermissionErrors))
+	ch <- prometheus.MustNewConstMetric(scrapePartialErrorsDesc,
+		prometheus.CounterValue, float64(p.scrapePartialErrors))
 }

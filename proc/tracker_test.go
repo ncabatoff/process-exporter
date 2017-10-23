@@ -5,20 +5,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
-
-// Order of updates returned by tracker is not specified.
-func tomap(ps []Update) map[Update]int {
-	m := make(map[Update]int)
-	for _, p := range ps {
-		if _, ok := m[p]; ok {
-			m[p]++
-		} else {
-			m[p] = 1
-		}
-	}
-	return m
-}
 
 // Verify that the tracker finds and tracks or ignores procs based on the
 // namer, and that it can distinguish between two procs with the same pid
@@ -48,12 +36,12 @@ func TestTrackerBasic(t *testing.T) {
 		},
 	}
 	// Note that n3 should not be tracked according to our namer.
-	tr := NewTracker(newNamer(n1, n2, n4), false)
+	tr := NewTracker(newNamer(n1, n2, n4), false, false)
 
 	for i, tc := range tests {
 		_, got, err := tr.Update(procInfoIter(tc.procs...))
 		noerr(t, err)
-		if diff := cmp.Diff(tomap(got), tomap(tc.want)); diff != "" {
+		if diff := cmp.Diff(got, tc.want); diff != "" {
 			t.Errorf("%d: update differs: (-got +want)\n%s", i, diff)
 		}
 	}
@@ -89,12 +77,12 @@ func TestTrackerChildren(t *testing.T) {
 		},
 	}
 	// Only n2 and children of n2s should be tracked
-	tr := NewTracker(newNamer(n2), true)
+	tr := NewTracker(newNamer(n2), true, false)
 
 	for i, tc := range tests {
 		_, got, err := tr.Update(procInfoIter(tc.procs...))
 		noerr(t, err)
-		if diff := cmp.Diff(tomap(got), tomap(tc.want)); diff != "" {
+		if diff := cmp.Diff(got, tc.want); diff != "" {
 			t.Errorf("%d: update differs: (-got +want)\n%s", i, diff)
 		}
 	}
@@ -111,20 +99,79 @@ func TestTrackerMetrics(t *testing.T) {
 	}{
 		{
 			piinfo(p, n, Counts{1, 2, 3, 4, 5, 6}, Memory{7, 8}, Filedesc{1, 10}, 9),
-			Update{n, Counts{}, Memory{7, 8}, Filedesc{1, 10}, tm, 9},
+			Update{n, Delta{}, Memory{7, 8}, Filedesc{1, 10}, tm, 9, nil},
 		},
 		{
 			piinfo(p, n, Counts{2, 3, 4, 5, 6, 7}, Memory{1, 2}, Filedesc{2, 20}, 1),
-			Update{n, Counts{1, 1, 1, 1, 1, 1}, Memory{1, 2}, Filedesc{2, 20}, tm, 1},
+			Update{n, Delta{1, 1, 1, 1, 1, 1}, Memory{1, 2}, Filedesc{2, 20}, tm, 1, nil},
 		},
 	}
-	tr := NewTracker(newNamer(n), false)
+	tr := NewTracker(newNamer(n), false, false)
 
 	for i, tc := range tests {
 		_, got, err := tr.Update(procInfoIter(tc.proc))
 		noerr(t, err)
 		if diff := cmp.Diff(got, []Update{tc.want}); diff != "" {
 			t.Errorf("%d: update differs: (-got +want)\n%s", i, diff)
+		}
+	}
+}
+
+func TestTrackerThreads(t *testing.T) {
+	p, n, tm := 1, "g1", time.Unix(0, 0).UTC()
+
+	tests := []struct {
+		proc IDInfo
+		want Update
+	}{
+		{
+			piinfo(p, n, Counts{}, Memory{}, Filedesc{1, 1}, 1),
+			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 1, nil},
+		}, {
+			piinfot(p, n, Counts{}, Memory{}, Filedesc{1, 1}, []Thread{
+				{ThreadID(ID{p, 0}), "t1", Counts{1, 2, 3, 4, 5, 6}},
+				{ThreadID(ID{p + 1, 0}), "t2", Counts{1, 1, 1, 1, 1, 1}},
+			}),
+			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2,
+				[]ThreadUpdate{
+					{"t1", Delta{}},
+					{"t2", Delta{}},
+				},
+			},
+		}, {
+			piinfot(p, n, Counts{}, Memory{}, Filedesc{1, 1}, []Thread{
+				{ThreadID(ID{p, 0}), "t1", Counts{2, 3, 4, 5, 6, 7}},
+				{ThreadID(ID{p + 1, 0}), "t2", Counts{2, 2, 2, 2, 2, 2}},
+				{ThreadID(ID{p + 2, 0}), "t2", Counts{1, 1, 1, 1, 1, 1}},
+			}),
+			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 3,
+				[]ThreadUpdate{
+					{"t1", Delta{1, 1, 1, 1, 1, 1}},
+					{"t2", Delta{1, 1, 1, 1, 1, 1}},
+					{"t2", Delta{}},
+				},
+			},
+		}, {
+			piinfot(p, n, Counts{}, Memory{}, Filedesc{1, 1}, []Thread{
+				{ThreadID(ID{p, 0}), "t1", Counts{2, 3, 4, 5, 6, 7}},
+				{ThreadID(ID{p + 2, 0}), "t2", Counts{1, 2, 3, 4, 5, 6}},
+			}),
+			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2,
+				[]ThreadUpdate{
+					{"t1", Delta{}},
+					{"t2", Delta{0, 1, 2, 3, 4, 5}},
+				},
+			},
+		},
+	}
+	tr := NewTracker(newNamer(n), false, true)
+
+	opts := cmpopts.SortSlices(lessThreadUpdate)
+	for i, tc := range tests {
+		_, got, err := tr.Update(procInfoIter(tc.proc))
+		noerr(t, err)
+		if diff := cmp.Diff(got, []Update{tc.want}, opts); diff != "" {
+			t.Errorf("%d: update differs: (-got +want)\n%s, %v, %v", i, diff, got[0].Threads, tc.want.Threads)
 		}
 	}
 }

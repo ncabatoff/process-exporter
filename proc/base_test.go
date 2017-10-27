@@ -73,3 +73,22 @@ func newProcParent(pid int, name string, ppid int) IDInfo {
 	id, static := newProcIDStatic(pid, ppid, 0, name, nil)
 	return IDInfo{id, static, Metrics{}, nil}
 }
+
+func piinfot(pid int, name string, c Counts, m Memory, f Filedesc, threads []Thread) IDInfo {
+	pii := piinfo(pid, name, c, m, f, len(threads))
+	pii.Threads = threads
+	return pii
+}
+
+func piinfo(pid int, name string, c Counts, m Memory, f Filedesc, t int) IDInfo {
+	return piinfost(pid, name, c, m, f, t, States{})
+}
+
+func piinfost(pid int, name string, c Counts, m Memory, f Filedesc, t int, s States) IDInfo {
+	id, static := newProcIDStatic(pid, 0, 0, name, nil)
+	return IDInfo{
+		ID:      id,
+		Static:  static,
+		Metrics: Metrics{c, m, f, uint64(t), s},
+	}
+}

@@ -44,6 +44,23 @@ func TestTrackerBasic(t *testing.T) {
 		if diff := cmp.Diff(got, tc.want); diff != "" {
 			t.Errorf("%d: update differs: (-got +want)\n%s", i, diff)
 		}
+		/* TODO: unreliable test:
+		--- FAIL: TestTrackerBasic (0.00s)
+		tracker_test.go:45: 2: update differs: (-got +want)
+		{[]proc.Update}[0].GroupName:
+			-: "g2"
+			+: "g4"
+		{[]proc.Update}[0].Start:
+			-: s"1970-01-01 00:00:02 +0000 UTC"
+			+: s"1970-01-01 00:00:03 +0000 UTC"
+		{[]proc.Update}[1].GroupName:
+			-: "g4"
+			+: "g2"
+		{[]proc.Update}[1].Start:
+			-: s"1970-01-01 00:00:03 +0000 UTC"
+			+: s"1970-01-01 00:00:02 +0000 UTC"
+		*/
+
 	}
 }
 
@@ -98,12 +115,16 @@ func TestTrackerMetrics(t *testing.T) {
 		want Update
 	}{
 		{
-			piinfo(p, n, Counts{1, 2, 3, 4, 5, 6}, Memory{7, 8}, Filedesc{1, 10}, 9),
-			Update{n, Delta{}, Memory{7, 8}, Filedesc{1, 10}, tm, 9, nil},
+			piinfost(p, n, Counts{1, 2, 3, 4, 5, 6}, Memory{7, 8},
+				Filedesc{1, 10}, 9, States{Sleeping: 1}),
+			Update{n, Delta{}, Memory{7, 8}, Filedesc{1, 10}, tm,
+				9, States{Sleeping: 1}, nil},
 		},
 		{
-			piinfo(p, n, Counts{2, 3, 4, 5, 6, 7}, Memory{1, 2}, Filedesc{2, 20}, 1),
-			Update{n, Delta{1, 1, 1, 1, 1, 1}, Memory{1, 2}, Filedesc{2, 20}, tm, 1, nil},
+			piinfost(p, n, Counts{2, 3, 4, 5, 6, 7}, Memory{1, 2},
+				Filedesc{2, 20}, 1, States{Running: 1}),
+			Update{n, Delta{1, 1, 1, 1, 1, 1}, Memory{1, 2},
+				Filedesc{2, 20}, tm, 1, States{Running: 1}, nil},
 		},
 	}
 	tr := NewTracker(newNamer(n), false, false)
@@ -126,13 +147,13 @@ func TestTrackerThreads(t *testing.T) {
 	}{
 		{
 			piinfo(p, n, Counts{}, Memory{}, Filedesc{1, 1}, 1),
-			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 1, nil},
+			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 1, States{}, nil},
 		}, {
 			piinfot(p, n, Counts{}, Memory{}, Filedesc{1, 1}, []Thread{
 				{ThreadID(ID{p, 0}), "t1", Counts{1, 2, 3, 4, 5, 6}},
 				{ThreadID(ID{p + 1, 0}), "t2", Counts{1, 1, 1, 1, 1, 1}},
 			}),
-			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2,
+			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{},
 				[]ThreadUpdate{
 					{"t1", Delta{}},
 					{"t2", Delta{}},
@@ -144,7 +165,7 @@ func TestTrackerThreads(t *testing.T) {
 				{ThreadID(ID{p + 1, 0}), "t2", Counts{2, 2, 2, 2, 2, 2}},
 				{ThreadID(ID{p + 2, 0}), "t2", Counts{1, 1, 1, 1, 1, 1}},
 			}),
-			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 3,
+			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 3, States{},
 				[]ThreadUpdate{
 					{"t1", Delta{1, 1, 1, 1, 1, 1}},
 					{"t2", Delta{1, 1, 1, 1, 1, 1}},
@@ -156,7 +177,7 @@ func TestTrackerThreads(t *testing.T) {
 				{ThreadID(ID{p, 0}), "t1", Counts{2, 3, 4, 5, 6, 7}},
 				{ThreadID(ID{p + 2, 0}), "t2", Counts{1, 2, 3, 4, 5, 6}},
 			}),
-			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2,
+			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{},
 				[]ThreadUpdate{
 					{"t1", Delta{}},
 					{"t2", Delta{0, 1, 2, 3, 4, 5}},

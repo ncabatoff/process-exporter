@@ -30,6 +30,7 @@ type (
 	// Group describes the metrics of a single group.
 	Group struct {
 		Counts
+		States
 		Procs int
 		Memory
 		OldestStartTime time.Time
@@ -83,6 +84,7 @@ func groupadd(grp Group, ts Update) Group {
 	}
 	grp.NumThreads += ts.NumThreads
 	grp.Counts.Add(ts.Latest)
+	grp.States.Add(ts.States)
 	if grp.OldestStartTime == zeroTime || ts.Start.Before(grp.OldestStartTime) {
 		grp.OldestStartTime = ts.Start
 	}

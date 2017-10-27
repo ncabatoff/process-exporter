@@ -58,12 +58,21 @@ type (
 		Limit uint64
 	}
 
+	States struct {
+		Running  int
+		Sleeping int
+		Waiting  int
+		Zombie   int
+		Other    int
+	}
+
 	// Metrics contains data read from /proc/pid/*
 	Metrics struct {
 		Counts
 		Memory
 		Filedesc
 		NumThreads uint64
+		States
 	}
 
 	// Thread contains the name and counts for a thread.
@@ -78,7 +87,6 @@ type (
 		ID
 		Static
 		Metrics
-		// TODO: make this more optional
 		Threads []Thread
 	}
 
@@ -103,6 +111,7 @@ type (
 		// It returns an error on complete failure.  Otherwise, it returns metrics
 		// and 0 on complete success, 1 if some (like I/O) couldn't be read.
 		GetMetrics() (Metrics, int, error)
+		GetStates() (States, error)
 		GetCounts() (Counts, int, error)
 		GetThreads() ([]Thread, error)
 	}
@@ -193,6 +202,14 @@ func (c Counts) Sub(c2 Counts) Delta {
 	return Delta(c)
 }
 
+func (s *States) Add(s2 States) {
+	s.Other += s2.Other
+	s.Running += s2.Running
+	s.Sleeping += s2.Sleeping
+	s.Waiting += s2.Waiting
+	s.Zombie += s2.Zombie
+}
+
 func (p IDInfo) GetThreads() ([]Thread, error) {
 	return p.Threads, nil
 }
@@ -220,6 +237,11 @@ func (p IDInfo) GetCounts() (Counts, int, error) {
 // GetMetrics implements Proc.
 func (p IDInfo) GetMetrics() (Metrics, int, error) {
 	return p.Metrics, 0, nil
+}
+
+// GetStates implements Proc.
+func (p IDInfo) GetStates() (States, error) {
+	return p.States, nil
 }
 
 func (p *proccache) GetPid() int {
@@ -319,6 +341,28 @@ func (p proc) GetCounts() (Counts, int, error) {
 	}, softerrors, nil
 }
 
+func (p proc) GetStates() (States, error) {
+	stat, err := p.getStat()
+	if err != nil {
+		return States{}, err
+	}
+
+	var s States
+	switch stat.State {
+	case "R":
+		s.Running++
+	case "S":
+		s.Sleeping++
+	case "D":
+		s.Waiting++
+	case "Z":
+		s.Zombie++
+	default:
+		s.Other++
+	}
+	return s, nil
+}
+
 // GetMetrics returns the current metrics for the proc.  The results are
 // not cached.
 func (p proc) GetMetrics() (Metrics, int, error) {
@@ -332,6 +376,9 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 	// Since GetMetrics isn't a pointer receiver method, our callers
 	// won't see the effect of the caching between calls.
 	stat, _ := p.getStat()
+
+	// Ditto for states
+	states, _ := p.GetStates()
 
 	numfds, err := p.Proc.FileDescriptorsLen()
 	if err != nil {
@@ -355,6 +402,7 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 			Limit: uint64(limits.OpenFiles),
 		},
 		NumThreads: uint64(stat.NumThreads),
+		States:     states,
 	}, softerrors, nil
 }
 

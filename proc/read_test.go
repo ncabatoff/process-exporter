@@ -88,6 +88,7 @@ func TestReadFixture(t *testing.T) {
 			Limit: 0x400,
 		},
 		NumThreads: 7,
+		States:     States{Sleeping: 1},
 	}
 	if diff := cmp.Diff(pii.Metrics, wantmetrics); diff != "" {
 		t.Errorf("metrics differs: (-got +want)\n%s", diff)
@@ -127,6 +128,10 @@ func TestAllProcs(t *testing.T) {
 		// All Go programs have multiple threads.
 		if metrics.NumThreads < 2 {
 			t.Errorf("got %d threads, want >1", metrics.NumThreads)
+		}
+		var zstates States
+		if metrics.States == zstates {
+			t.Errorf("got empty states")
 		}
 		threads, err := procs.GetThreads()
 		if len(threads) < 2 {

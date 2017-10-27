@@ -138,6 +138,12 @@ var (
 		[]string{"groupname"},
 		nil)
 
+	statesDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_states",
+		"Number of processes in states Running, Sleeping, Waiting, Zombie, or Other",
+		[]string{"groupname", "state"},
+		nil)
+
 	scrapeErrorsDesc = prometheus.NewDesc(
 		"namedprocess_scrape_errors",
 		"general scrape errors: no proc metrics collected during a cycle",
@@ -404,6 +410,7 @@ func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- majorPageFaultsDesc
 	ch <- minorPageFaultsDesc
 	ch <- numThreadsDesc
+	ch <- statesDesc
 	ch <- scrapeErrorsDesc
 	ch <- scrapeProcReadErrorsDesc
 	ch <- scrapePartialErrorsDesc
@@ -463,6 +470,16 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 				prometheus.CounterValue, float64(gcounts.MinorPageFaults), gname)
 			ch <- prometheus.MustNewConstMetric(numThreadsDesc,
 				prometheus.GaugeValue, float64(gcounts.NumThreads), gname)
+			ch <- prometheus.MustNewConstMetric(statesDesc,
+				prometheus.GaugeValue, float64(gcounts.States.Running), gname, "Running")
+			ch <- prometheus.MustNewConstMetric(statesDesc,
+				prometheus.GaugeValue, float64(gcounts.States.Sleeping), gname, "Sleeping")
+			ch <- prometheus.MustNewConstMetric(statesDesc,
+				prometheus.GaugeValue, float64(gcounts.States.Waiting), gname, "Waiting")
+			ch <- prometheus.MustNewConstMetric(statesDesc,
+				prometheus.GaugeValue, float64(gcounts.States.Zombie), gname, "Zombie")
+			ch <- prometheus.MustNewConstMetric(statesDesc,
+				prometheus.GaugeValue, float64(gcounts.States.Other), gname, "Other")
 			if p.threads {
 				for _, thr := range gcounts.Threads {
 					ch <- prometheus.MustNewConstMetric(threadCountDesc,

@@ -6,7 +6,7 @@ FROM golang
 ADD . /go/src/github.com/ncabatoff/process-exporter
 
 # Build the process-exporter command inside the container.
-RUN make -C /go/src/github.com/ncabatoff/process-exporter
+RUN make -C /go/src/github.com/ncabatoff/process-exporter vet build
 
 USER root
 

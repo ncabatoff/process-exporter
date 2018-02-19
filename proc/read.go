@@ -3,9 +3,11 @@ package proc
 import (
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"time"
+	"syscall"
 
 	"github.com/prometheus/procfs"
 )
@@ -28,6 +30,7 @@ type (
 
 	// Static contains data read from /proc/pid/*
 	Static struct {
+		Account   string
 		Name      string
 		Cmdline   []string
 		ParentPid int
@@ -295,6 +298,25 @@ func (p *proccache) getIo() (procfs.ProcIO, error) {
 	return *p.io, nil
 }
 
+func (p *proccache) getAccount() (string, error) {
+	fi, err := os.Stat(fmt.Sprintf("/proc/%d/stat", p.Proc.PID))
+	if err != nil {
+		return "", err
+	}
+
+	stat, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		return "", nil
+	}
+
+	account, err := user.LookupId(fmt.Sprint(stat.Uid))
+	if err != nil {
+		return "", err
+	}
+
+	return account.Username, nil
+}
+
 // GetStatic returns the ProcStatic corresponding to this proc.
 func (p *proccache) GetStatic() (Static, error) {
 	// /proc/<pid>/cmdline is normally world-readable.
@@ -309,7 +331,11 @@ func (p *proccache) GetStatic() (Static, error) {
 	}
 	startTime := time.Unix(p.fs.BootTime, 0).UTC()
 	startTime = startTime.Add(time.Second / userHZ * time.Duration(stat.Starttime))
+
+	account, _ := p.getAccount()
+
 	return Static{
+		Account:   account,
 		Name:      stat.Comm,
 		Cmdline:   cmdline,
 		ParentPid: stat.PPID,

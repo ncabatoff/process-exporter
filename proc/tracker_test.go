@@ -15,6 +15,7 @@ func TestTrackerBasic(t *testing.T) {
 	p1, p2, p3 := 1, 2, 3
 	n1, n2, n3, n4 := "g1", "g2", "g3", "g4"
 	t1, t2, t3 := time.Unix(1, 0).UTC(), time.Unix(2, 0).UTC(), time.Unix(3, 0).UTC()
+	u := ""
 
 	tests := []struct {
 		procs []IDInfo
@@ -22,17 +23,17 @@ func TestTrackerBasic(t *testing.T) {
 	}{
 		{
 			[]IDInfo{newProcStart(p1, n1, 1), newProcStart(p3, n3, 1)},
-			[]Update{{GroupName: n1, Start: t1}},
+			[]Update{{Account: u, GroupName: n1, Start: t1}},
 		},
 		{
 			// p3 (ignored) has exited and p2 has appeared
 			[]IDInfo{newProcStart(p1, n1, 1), newProcStart(p2, n2, 2)},
-			[]Update{{GroupName: n1, Start: t1}, {GroupName: n2, Start: t2}},
+			[]Update{{Account: u, GroupName: n1, Start: t1}, {Account: u, GroupName: n2, Start: t2}},
 		},
 		{
 			// p1 has exited and a new proc with a new name has taken its pid
 			[]IDInfo{newProcStart(p1, n4, 3), newProcStart(p2, n2, 2)},
-			[]Update{{GroupName: n4, Start: t3}, {GroupName: n2, Start: t2}},
+			[]Update{{Account: u, GroupName: n4, Start: t3}, {Account: u, GroupName: n2, Start: t2}},
 		},
 	}
 	// Note that n3 should not be tracked according to our namer.
@@ -59,8 +60,8 @@ func TestTrackerBasic(t *testing.T) {
 		{[]proc.Update}[1].Start:
 			-: s"1970-01-01 00:00:03 +0000 UTC"
 			+: s"1970-01-01 00:00:02 +0000 UTC"
-		*/
 
+		*/
 	}
 }
 
@@ -72,6 +73,7 @@ func TestTrackerChildren(t *testing.T) {
 	n1, n2, n3 := "g1", "g2", "g3"
 	// In this test everything starts at time t1 for simplicity
 	t1 := time.Unix(0, 0).UTC()
+	u := ""
 
 	tests := []struct {
 		procs []IDInfo
@@ -82,7 +84,7 @@ func TestTrackerChildren(t *testing.T) {
 				newProcParent(p1, n1, 0),
 				newProcParent(p2, n2, p1),
 			},
-			[]Update{{GroupName: n2, Start: t1}},
+			[]Update{{Account: u, GroupName: n2, Start: t1}},
 		},
 		{
 			[]IDInfo{
@@ -90,7 +92,7 @@ func TestTrackerChildren(t *testing.T) {
 				newProcParent(p2, n2, p1),
 				newProcParent(p3, n3, p2),
 			},
-			[]Update{{GroupName: n2, Start: t1}, {GroupName: n2, Start: t1}},
+			[]Update{{Account: u, GroupName: n2, Start: t1}, {GroupName: n2, Start: t1}},
 		},
 	}
 	// Only n2 and children of n2s should be tracked
@@ -109,6 +111,7 @@ func TestTrackerChildren(t *testing.T) {
 // match the input we're giving it.
 func TestTrackerMetrics(t *testing.T) {
 	p, n, tm := 1, "g1", time.Unix(0, 0).UTC()
+	u := ""
 
 	tests := []struct {
 		proc IDInfo
@@ -117,13 +120,13 @@ func TestTrackerMetrics(t *testing.T) {
 		{
 			piinfost(p, n, Counts{1, 2, 3, 4, 5, 6}, Memory{7, 8},
 				Filedesc{1, 10}, 9, States{Sleeping: 1}),
-			Update{n, Delta{}, Memory{7, 8}, Filedesc{1, 10}, tm,
+			Update{u, n, Delta{}, Memory{7, 8}, Filedesc{1, 10}, tm,
 				9, States{Sleeping: 1}, nil},
 		},
 		{
 			piinfost(p, n, Counts{2, 3, 4, 5, 6, 7}, Memory{1, 2},
 				Filedesc{2, 20}, 1, States{Running: 1}),
-			Update{n, Delta{1, 1, 1, 1, 1, 1}, Memory{1, 2},
+			Update{u, n, Delta{1, 1, 1, 1, 1, 1}, Memory{1, 2},
 				Filedesc{2, 20}, tm, 1, States{Running: 1}, nil},
 		},
 	}
@@ -140,6 +143,7 @@ func TestTrackerMetrics(t *testing.T) {
 
 func TestTrackerThreads(t *testing.T) {
 	p, n, tm := 1, "g1", time.Unix(0, 0).UTC()
+	u := ""
 
 	tests := []struct {
 		proc IDInfo
@@ -147,13 +151,13 @@ func TestTrackerThreads(t *testing.T) {
 	}{
 		{
 			piinfo(p, n, Counts{}, Memory{}, Filedesc{1, 1}, 1),
-			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 1, States{}, nil},
+			Update{u, n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 1, States{}, nil},
 		}, {
 			piinfot(p, n, Counts{}, Memory{}, Filedesc{1, 1}, []Thread{
 				{ThreadID(ID{p, 0}), "t1", Counts{1, 2, 3, 4, 5, 6}},
 				{ThreadID(ID{p + 1, 0}), "t2", Counts{1, 1, 1, 1, 1, 1}},
 			}),
-			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{},
+			Update{u, n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{},
 				[]ThreadUpdate{
 					{"t1", Delta{}},
 					{"t2", Delta{}},
@@ -165,7 +169,7 @@ func TestTrackerThreads(t *testing.T) {
 				{ThreadID(ID{p + 1, 0}), "t2", Counts{2, 2, 2, 2, 2, 2}},
 				{ThreadID(ID{p + 2, 0}), "t2", Counts{1, 1, 1, 1, 1, 1}},
 			}),
-			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 3, States{},
+			Update{u, n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 3, States{},
 				[]ThreadUpdate{
 					{"t1", Delta{1, 1, 1, 1, 1, 1}},
 					{"t2", Delta{1, 1, 1, 1, 1, 1}},
@@ -177,7 +181,7 @@ func TestTrackerThreads(t *testing.T) {
 				{ThreadID(ID{p, 0}), "t1", Counts{2, 3, 4, 5, 6, 7}},
 				{ThreadID(ID{p + 2, 0}), "t2", Counts{1, 2, 3, 4, 5, 6}},
 			}),
-			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{},
+			Update{u, n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{},
 				[]ThreadUpdate{
 					{"t1", Delta{}},
 					{"t2", Delta{0, 1, 2, 3, 4, 5}},

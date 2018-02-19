@@ -63,6 +63,8 @@ type (
 
 	// Update reports on the latest stats for a process.
 	Update struct {
+		// Account is a system account name a owning a process.
+		Account string
 		// GroupName is the name given by the namer to the process.
 		GroupName string
 		// Latest is how much the counts increased since last cycle.
@@ -135,6 +137,7 @@ func lessCounts(x, y Counts) bool {
 
 func (tp *trackedProc) getUpdate() Update {
 	u := Update{
+		Account:    tp.static.Account,
 		GroupName:  tp.groupName,
 		Latest:     tp.lastaccum,
 		Memory:     tp.metrics.Memory,

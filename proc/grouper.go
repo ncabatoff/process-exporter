@@ -12,13 +12,19 @@ type (
 	Grouper struct {
 		// groupAccum records the historical accumulation of a group so that
 		// we can avoid ever decreasing the counts we return.
-		groupAccum  map[string]Counts
+		groupAccum  map[GroupId]Counts
 		tracker     *Tracker
-		threadAccum map[string]map[string]Threads
+		threadAccum map[GroupId]map[string]Threads
 	}
 
-	// GroupByName maps group name to group metrics.
-	GroupByName map[string]Group
+	// GroupId is a compound-key to group metrics.
+	GroupId struct {
+		Account string
+		Name    string
+	}
+
+	// GroupById maps GroupId to group metrics.
+	GroupById map[GroupId]Group
 
 	// Threads collects metrics for threads in a group sharing a thread name.
 	Threads struct {
@@ -62,8 +68,8 @@ func lessThreads(x, y Threads) bool {
 // NewGrouper creates a grouper.
 func NewGrouper(namer common.MatchNamer, trackChildren, trackThreads bool) *Grouper {
 	g := Grouper{
-		groupAccum:  make(map[string]Counts),
-		threadAccum: make(map[string]map[string]Threads),
+		groupAccum:  make(map[GroupId]Counts),
+		threadAccum: make(map[GroupId]map[string]Threads),
 		tracker:     NewTracker(namer, trackChildren, trackThreads),
 	}
 	return &g
@@ -100,7 +106,7 @@ func groupadd(grp Group, ts Update) Group {
 // with name X disappears, name X will still appear in the results
 // with the same counts as before; of course, all non-count metrics
 // will be zero.
-func (g *Grouper) Update(iter Iter) (CollectErrors, GroupByName, error) {
+func (g *Grouper) Update(iter Iter) (CollectErrors, GroupById, error) {
 	cerrs, tracked, err := g.tracker.Update(iter)
 	if err != nil {
 		return cerrs, nil, err
@@ -108,43 +114,45 @@ func (g *Grouper) Update(iter Iter) (CollectErrors, GroupByName, error) {
 	return cerrs, g.groups(tracked), nil
 }
 
-// Translate the updates into a new GroupByName and update internal history.
-func (g *Grouper) groups(tracked []Update) GroupByName {
-	groups := make(GroupByName)
-	threadsByGroup := make(map[string][]ThreadUpdate)
+// Translate the updates into a new GroupById and update internal history.
+func (g *Grouper) groups(tracked []Update) GroupById {
+	groups := make(GroupById)
+	threadsByGroup := make(map[GroupId][]ThreadUpdate)
 
 	for _, update := range tracked {
-		groups[update.GroupName] = groupadd(groups[update.GroupName], update)
+		groupId := GroupId{update.Account, update.GroupName}
+
+		groups[groupId] = groupadd(groups[groupId], update)
 		if update.Threads != nil {
-			threadsByGroup[update.GroupName] =
-				append(threadsByGroup[update.GroupName], update.Threads...)
+			threadsByGroup[groupId] =
+				append(threadsByGroup[groupId], update.Threads...)
 		}
 	}
 
 	// Add any accumulated counts to what was just observed,
 	// and update the accumulators.
-	for gname, group := range groups {
-		if oldcounts, ok := g.groupAccum[gname]; ok {
+	for groupId, group := range groups {
+		if oldcounts, ok := g.groupAccum[groupId]; ok {
 			group.Counts.Add(Delta(oldcounts))
 		}
-		g.groupAccum[gname] = group.Counts
-		group.Threads = g.threads(gname, threadsByGroup[gname])
-		groups[gname] = group
+		g.groupAccum[groupId] = group.Counts
+		group.Threads = g.threads(groupId, threadsByGroup[groupId])
+		groups[groupId] = group
 	}
 
 	// Now add any groups that were observed in the past but aren't running now.
-	for gname, gcounts := range g.groupAccum {
-		if _, ok := groups[gname]; !ok {
-			groups[gname] = Group{Counts: gcounts}
+	for groupId, gcounts := range g.groupAccum {
+		if _, ok := groups[groupId]; !ok {
+			groups[groupId] = Group{Counts: gcounts}
 		}
 	}
 
 	return groups
 }
 
-func (g *Grouper) threads(gname string, tracked []ThreadUpdate) []Threads {
+func (g *Grouper) threads(groupId GroupId, tracked []ThreadUpdate) []Threads {
 	if len(tracked) == 0 {
-		delete(g.threadAccum, gname)
+		delete(g.threadAccum, groupId)
 		return nil
 	}
 
@@ -162,7 +170,7 @@ func (g *Grouper) threads(gname string, tracked []ThreadUpdate) []Threads {
 
 	// Add any accumulated counts to what was just observed,
 	// and update the accumulators.
-	if history := g.threadAccum[gname]; history != nil {
+	if history := g.threadAccum[groupId]; history != nil {
 		for tname := range threads {
 			if oldcounts, ok := history[tname]; ok {
 				counts := threads[tname]
@@ -172,7 +180,7 @@ func (g *Grouper) threads(gname string, tracked []ThreadUpdate) []Threads {
 		}
 	}
 
-	g.threadAccum[gname] = threads
+	g.threadAccum[groupId] = threads
 
 	for _, thr := range threads {
 		ret = append(ret, thr)

@@ -60,11 +60,11 @@ func lessThreads(x, y Threads) bool {
 }
 
 // NewGrouper creates a grouper.
-func NewGrouper(namer common.MatchNamer, trackChildren, trackThreads bool) *Grouper {
+func NewGrouper(namer common.MatchNamer, trackChildren, trackThreads, alwaysRecheck bool) *Grouper {
 	g := Grouper{
 		groupAccum:  make(map[string]Counts),
 		threadAccum: make(map[string]map[string]Threads),
-		tracker:     NewTracker(namer, trackChildren, trackThreads),
+		tracker:     NewTracker(namer, trackChildren, trackThreads, alwaysRecheck),
 	}
 	return &g
 }

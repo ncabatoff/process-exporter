@@ -98,6 +98,10 @@ type (
 	}
 )
 
+func lessUpdateGroupName(x, y Update) bool {
+	return x.GroupName < y.GroupName
+}
+
 func lessThreadUpdate(x, y ThreadUpdate) bool {
 	if x.ThreadName > y.ThreadName {
 		return false

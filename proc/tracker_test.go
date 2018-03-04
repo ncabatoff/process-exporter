@@ -38,29 +38,13 @@ func TestTrackerBasic(t *testing.T) {
 	// Note that n3 should not be tracked according to our namer.
 	tr := NewTracker(newNamer(n1, n2, n4), false, false, false)
 
+	opts := cmpopts.SortSlices(lessUpdateGroupName)
 	for i, tc := range tests {
 		_, got, err := tr.Update(procInfoIter(tc.procs...))
 		noerr(t, err)
-		if diff := cmp.Diff(got, tc.want); diff != "" {
+		if diff := cmp.Diff(got, tc.want, opts); diff != "" {
 			t.Errorf("%d: update differs: (-got +want)\n%s", i, diff)
 		}
-		/* TODO: unreliable test:
-		--- FAIL: TestTrackerBasic (0.00s)
-		tracker_test.go:45: 2: update differs: (-got +want)
-		{[]proc.Update}[0].GroupName:
-			-: "g2"
-			+: "g4"
-		{[]proc.Update}[0].Start:
-			-: s"1970-01-01 00:00:02 +0000 UTC"
-			+: s"1970-01-01 00:00:03 +0000 UTC"
-		{[]proc.Update}[1].GroupName:
-			-: "g4"
-			+: "g2"
-		{[]proc.Update}[1].Start:
-			-: s"1970-01-01 00:00:03 +0000 UTC"
-			+: s"1970-01-01 00:00:02 +0000 UTC"
-		*/
-
 	}
 }
 

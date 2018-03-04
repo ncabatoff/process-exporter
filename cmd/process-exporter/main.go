@@ -276,6 +276,8 @@ func main() {
 			"print manual")
 		configPath = flag.String("config.path", "",
 			"path to YAML config file")
+		recheck = flag.Bool("recheck", false,
+			"recheck process names on each scrape")
 	)
 	flag.Parse()
 
@@ -317,7 +319,7 @@ func main() {
 		matchnamer = namemapper
 	}
 
-	pc, err := NewProcessCollector(*procfsPath, *children, *threads, matchnamer)
+	pc, err := NewProcessCollector(*procfsPath, *children, *threads, matchnamer, *recheck)
 	if err != nil {
 		log.Fatalf("Error initializing: %v", err)
 	}
@@ -372,6 +374,7 @@ func NewProcessCollector(
 	children bool,
 	threads bool,
 	n common.MatchNamer,
+	recheck bool,
 ) (*NamedProcessCollector, error) {
 	fs, err := proc.NewFS(procfsPath)
 	if err != nil {
@@ -379,7 +382,7 @@ func NewProcessCollector(
 	}
 	p := &NamedProcessCollector{
 		scrapeChan: make(chan scrapeRequest),
-		Grouper:    proc.NewGrouper(n, children, threads),
+		Grouper:    proc.NewGrouper(n, children, threads, recheck),
 		source:     fs,
 		threads:    threads,
 	}

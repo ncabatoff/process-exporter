@@ -36,7 +36,7 @@ func TestTrackerBasic(t *testing.T) {
 		},
 	}
 	// Note that n3 should not be tracked according to our namer.
-	tr := NewTracker(newNamer(n1, n2, n4), false, false)
+	tr := NewTracker(newNamer(n1, n2, n4), false, false, false)
 
 	for i, tc := range tests {
 		_, got, err := tr.Update(procInfoIter(tc.procs...))
@@ -94,7 +94,7 @@ func TestTrackerChildren(t *testing.T) {
 		},
 	}
 	// Only n2 and children of n2s should be tracked
-	tr := NewTracker(newNamer(n2), true, false)
+	tr := NewTracker(newNamer(n2), true, false, false)
 
 	for i, tc := range tests {
 		_, got, err := tr.Update(procInfoIter(tc.procs...))
@@ -127,7 +127,7 @@ func TestTrackerMetrics(t *testing.T) {
 				Filedesc{2, 20}, tm, 1, States{Running: 1}, nil},
 		},
 	}
-	tr := NewTracker(newNamer(n), false, false)
+	tr := NewTracker(newNamer(n), false, false, false)
 
 	for i, tc := range tests {
 		_, got, err := tr.Update(procInfoIter(tc.proc))
@@ -185,7 +185,7 @@ func TestTrackerThreads(t *testing.T) {
 			},
 		},
 	}
-	tr := NewTracker(newNamer(n), false, true)
+	tr := NewTracker(newNamer(n), false, true, false)
 
 	opts := cmpopts.SortSlices(lessThreadUpdate)
 	for i, tc := range tests {

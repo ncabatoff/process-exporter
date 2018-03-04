@@ -25,6 +25,8 @@ type (
 		trackChildren bool
 		// trackThreads makes Tracker track per-thread metrics.
 		trackThreads bool
+		// never ignore processes, i.e. always re-check untracked processes in case comm has changed
+		alwaysRecheck bool
 	}
 
 	// Delta is an alias of Counts used to signal that its contents are not
@@ -152,13 +154,14 @@ func (tp *trackedProc) getUpdate() Update {
 }
 
 // NewTracker creates a Tracker.
-func NewTracker(namer common.MatchNamer, trackChildren, trackThreads bool) *Tracker {
+func NewTracker(namer common.MatchNamer, trackChildren, trackThreads, alwaysRecheck bool) *Tracker {
 	return &Tracker{
 		namer:         namer,
 		tracked:       make(map[ID]*trackedProc),
 		procIds:       make(map[int]ID),
 		trackChildren: trackChildren,
 		trackThreads:  trackThreads,
+		alwaysRecheck: alwaysRecheck,
 	}
 }
 
@@ -179,7 +182,10 @@ func (t *Tracker) track(groupName string, idinfo IDInfo) {
 }
 
 func (t *Tracker) ignore(id ID) {
-	t.tracked[id] = nil
+	// only ignore ID if we didn't set recheck to true
+	if t.alwaysRecheck == false {
+		t.tracked[id] = nil
+	}
 }
 
 func (tp *trackedProc) update(metrics Metrics, now time.Time, cerrs *CollectErrors, threads []Thread) {

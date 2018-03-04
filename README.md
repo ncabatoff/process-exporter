@@ -1,6 +1,8 @@
 # process-exporter
 Prometheus exporter that mines /proc to report on selected processes.
 
+[![Build Status](https://travis-ci.org/ncabatoff/process-exporter.svg?branch=master)](https://travis-ci.org/ncabatoff/process-exporter)
+
 The premise for this exporter is that sometimes you have apps that are
 impractical to instrument directly, either because you don't control the code
 or they're written in a language that isn't easy to instrument with Prometheus.

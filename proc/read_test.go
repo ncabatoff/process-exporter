@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"testing"
 	"time"
 
@@ -142,6 +143,45 @@ func TestAllProcs(t *testing.T) {
 	noerr(t, err)
 	if count == 0 {
 		t.Errorf("got %d, want 0", count)
+	}
+}
+
+// Verify that pid 1 doesn't provide I/O or FD stats.  This test
+// fails if pid 1 is owned by the same user running the tests,
+// so it's skipped if the current user's uid is 0 (root).  That
+// isn't foolproof but it should handle most cases.
+func TestMissingIo(t *testing.T) {
+	u, err := user.Current()
+	if err != nil {
+		t.Fatalf("Unable to get current user: %v", err)
+	}
+	if u.Uid == "0" {
+		return
+	}
+	procs := allprocs("/proc")
+	for procs.Next() {
+		if procs.GetPid() != 1 {
+			continue
+		}
+		met, softerrs, err := procs.GetMetrics()
+		noerr(t, err)
+
+		if softerrs != 1 {
+			t.Errorf("got %d, want %d", softerrs, 1)
+		}
+		if met.ReadBytes != uint64(0) {
+			t.Errorf("got %d, want %d", met.ReadBytes, 0)
+		}
+		if met.WriteBytes != uint64(0) {
+			t.Errorf("got %d, want %d", met.WriteBytes, 0)
+		}
+		if met.ResidentBytes == uint64(0) {
+			t.Errorf("got %d, want non-zero", met.ResidentBytes)
+		}
+		if met.Filedesc.Limit == uint64(0) {
+			t.Errorf("got %d, want non-zero", met.Filedesc.Limit)
+		}
+		return
 	}
 }
 

@@ -1,0 +1,27 @@
+builds:
+  - main: cmd/process-exporter/main.go
+    binary: cmd/process-exporter
+    flags: -tags netgo
+    goos:
+      - linux
+      - darwin
+      - freebsd
+      - openbsd
+      - netbsd
+      - dragonfly
+    goarch:
+      - amd64
+      - 386
+      - arm
+      - arm64
+      - ppc64
+      - ppc64le
+release:
+  draft: true
+  prerelease: true
+dockers:
+  - image: ncabatoff/process-exporter
+    dockerfile: Dockerfile.goreleaser
+    binary: cmd/process-exporter
+    goos: linux
+    goarch: amd64

@@ -1,0 +1,7 @@
+FROM scratch
+
+COPY process-exporter /
+
+ENTRYPOINT ["/process-exporter"]
+
+EXPOSE 9256

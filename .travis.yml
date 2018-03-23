@@ -13,3 +13,6 @@ go_import_path: github.com/ncabatoff/process-exporter
 
 script:
 - make style vet test
+
+after_success:
+  - test -n "$TRAVIS_TAG" && curl -sL http://git.io/goreleaser | bash

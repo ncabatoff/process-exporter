@@ -10,7 +10,6 @@ RUN make -C /go/src/github.com/ncabatoff/process-exporter
 
 FROM scratch
 
-USER root
 COPY --from=build /go/src/github.com/ncabatoff/process-exporter/process-exporter /bin/process-exporter
 
 # Run the process-exporter command by default when the container starts.

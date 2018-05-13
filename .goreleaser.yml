@@ -4,18 +4,18 @@ builds:
     flags: -tags netgo
     goos:
       - linux
-      - darwin
-      - freebsd
-      - openbsd
-      - netbsd
-      - dragonfly
+#     - darwin
+#     - freebsd
+#     - openbsd
+#     - netbsd
+#     - dragonfly
     goarch:
       - amd64
-      - 386
-      - arm
-      - arm64
-      - ppc64
-      - ppc64le
+#     - 386
+#     - arm
+#     - arm64
+#     - ppc64
+#     - ppc64le
 release:
   draft: true
   prerelease: true

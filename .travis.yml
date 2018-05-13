@@ -1,14 +1,16 @@
-sudo: required
+services:
+  - docker
 
 language: go
 
 go:
-- 1.10.x
+  - 1.10.x
 
 go_import_path: github.com/ncabatoff/process-exporter
 
 script:
-- make style vet test
+  - make style vet test
 
 after_success:
+  - docker login -u $DOCKER_USER -p "$DOCKER_PASSWORD"
   - test -n "$TRAVIS_TAG" && curl -sL http://git.io/goreleaser | bash

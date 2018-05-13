@@ -131,35 +131,18 @@ A docker image can be created with
 make docker
 ```
 
+Or simply run
+
+```
+docker pull ncabatoff/process-exporter
+```
+
 Then run the docker, e.g.
 
 ```
-docker run --privileged --name pexporter -d -v /proc:/host/proc -p 127.0.0.1:9256:9256 process-exporter:master -procfs /host/proc -procnames chromium-browse,bash,prometheus,gvim,upstart:-user -namemapping "upstart,(-user)"
+docker run --privileged --name pexporter -d -v /proc:/host/proc -p 127.0.0.1:9256:9256 ncabatoff/process-exporter -procfs /host/proc -procnames chromium-browse,bash,prometheus,gvim,upstart:-user -namemapping "upstart,(-user)"
 ```
 
 This will expose metrics on http://localhost:9256/metrics.  Leave off the
-`127.0.0.1:` to publish on all interfaces.  Leave off the --priviliged and
-add the --user docker run argument if you only need to monitor processes
-belonging to a single user.
-
-## History
-
-An earlier version of this exporter had options to enable auto-discovery of
-which processes were consuming resources.  This functionality has been removed.
-These options were based on a percentage of resource usage, e.g. if an
-untracked process consumed X% of CPU during a scrape, start tracking processes
-with that name.  However during any given scrape it's likely that most
-processes are idle, so we could add a process that consumes minimal resources
-but which happened to be active during the interval preceding the current
-scrape.  Over time this means that a great many processes wind up being
-scraped, which becomes unmanageable to visualize.  This could be mitigated by
-looking at resource usage over longer intervals, but ultimately I didn't feel
-this feature was important enough to invest more time in at this point.  It may
-re-appear at some point in the future, but no promises.
-
-Another lost feature: the "other" group was used to count usage by non-tracked
-procs.  This was useful to get an idea of what wasn't being monitored.  But it
-comes at a high cost: if you know what processes you care about, you're wasting
-a lot of CPU to compute the usage of everything else that you don't care about.
-The new approach is to minimize resources expended on non-tracked processes and
-to require the user to whitelist the processes to track.  
+`127.0.0.1:` to publish on all interfaces.  Replace `--priviliged` with
+`--user someuser` if you only need to monitor processes belonging to someuser.

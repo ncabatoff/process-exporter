@@ -3,6 +3,7 @@ Prometheus exporter that mines /proc to report on selected processes.
 
 [![Release](https://img.shields.io/github/release/ncabatoff/process-exporter.svg?style=flat-square")](https://github.com/ncabatoff/process-exporter/releases/latest)
 [![Build Status](https://travis-ci.org/ncabatoff/process-exporter.svg?branch=master)](https://travis-ci.org/ncabatoff/process-exporter)
+[![Powered By: GoReleaser](https://img.shields.io/badge/powered%20by-goreleaser-green.svg?branch=master)](https://github.com/goreleaser)
 
 The premise for this exporter is that sometimes you have apps that are
 impractical to instrument directly, either because you don't control the code

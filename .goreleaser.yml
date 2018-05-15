@@ -4,11 +4,6 @@ builds:
     flags: -tags netgo
     goos:
       - linux
-      - darwin
-      - freebsd
-      - openbsd
-      - netbsd
-      - dragonfly
     goarch:
       - amd64
       - 386

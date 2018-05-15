@@ -6,11 +6,11 @@ builds:
       - linux
     goarch:
       - amd64
-#     - 386
-#     - arm
-#     - arm64
-#     - ppc64
-#     - ppc64le
+      - 386
+      - arm
+      - arm64
+      - ppc64
+      - ppc64le
 nfpm:
   homepage: https://github.com/ncabatoff/process-exporter
   maintainer: nick.cabatoff+procexp@gmail.com

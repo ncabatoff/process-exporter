@@ -8,7 +8,7 @@ go:
 
 before_install:
   - sudo apt-get -qq update
-  - sudo apt-get install -y rpmbuild
+  - sudo apt-get install -y rpm
 
 go_import_path: github.com/ncabatoff/process-exporter
 

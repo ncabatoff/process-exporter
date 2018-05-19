@@ -4,7 +4,7 @@ Description=Process Exporter for Prometheus
 [Service]
 User=root
 Type=simple
-ExecStart=/usr/bin/process-exporter --config.path /etc/process-exporter/all.yaml --web.listen-address=127.0.0.1:9256
+ExecStart=/usr/bin/process-exporter --config.path /etc/process-exporter/all.yaml --web.listen-address=:9256
 KillMode=process
 Restart=always
 

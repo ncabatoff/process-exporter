@@ -11,6 +11,10 @@ builds:
       - arm64
       - ppc64
       - ppc64le
+    goarm:
+      - 5
+      - 6
+      - 7
 nfpm:
   homepage: https://github.com/ncabatoff/process-exporter
   maintainer: nick.cabatoff+procexp@gmail.com

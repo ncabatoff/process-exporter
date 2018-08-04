@@ -106,7 +106,8 @@ Template variables available:
 Each item in `process_names` must contain one or more selectors (`comm`, `exe`
 or `cmdline`); if more than one selector is present, they must all match.  Each
 selector is a list of strings to match against a process's `comm`, `argv[0]`,
-or in the case of `cmdline`, a regexp to apply to the command line.  
+or in the case of `cmdline`, a regexp to apply to the command line.  The cmdline
+regexp uses the [Go syntax](https://golang.org/pkg/regexp).
 
 For `comm` and `exe`, the list of strings is an OR, meaning any process
 matching any of the strings will be added to the item's group.  
@@ -140,7 +141,7 @@ process_names:
     exe: 
     - /usr/local/bin/process-exporter
     cmdline: 
-    - -config.path\\s+(?P<Cfgfile>\\S+)
+    - -config.path\s+(?P<Cfgfile>\S+)
 
 ```
 

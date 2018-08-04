@@ -1,3 +1,4 @@
 .*.sw?
 process-exporter
 dist
+vendor/

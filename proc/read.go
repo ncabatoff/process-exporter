@@ -176,7 +176,7 @@ type (
 	// FS implements Source.
 	FS struct {
 		procfs.FS
-		BootTime   int64
+		BootTime   uint64
 		MountPoint string
 	}
 )
@@ -307,7 +307,7 @@ func (p *proccache) GetStatic() (Static, error) {
 	if err != nil {
 		return Static{}, err
 	}
-	startTime := time.Unix(p.fs.BootTime, 0).UTC()
+	startTime := time.Unix(int64(p.fs.BootTime), 0).UTC()
 	startTime = startTime.Add(time.Second / userHZ * time.Duration(stat.Starttime))
 	return Static{
 		Name:      stat.Comm,

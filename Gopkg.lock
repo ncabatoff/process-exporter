@@ -10,14 +10,6 @@
   revision = "3a771d992973f24aa725d07868b467d1ddfceafb"
 
 [[projects]]
-  digest = "1:ca82a3b99694824c627573c2a76d0e49719b4a9c02d1d85a2ac91f1c1f52ab9b"
-  name = "github.com/fatih/structs"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "a720dfa8df582c51dee1b36feabb906bde1588bd"
-  version = "v1.0"
-
-[[projects]]
   digest = "1:15042ad3498153684d09f393bbaec6b216c8eec6d61f63dff711de7d64ed8861"
   name = "github.com/golang/protobuf"
   packages = ["proto"]
@@ -70,6 +62,14 @@
   packages = ["."]
   pruneopts = "UT"
   revision = "15938421d91a82d197de7fc59aebcac65c43407d"
+
+[[projects]]
+  branch = "master"
+  digest = "1:9e33629d4ec9e9344715a54fa0a107f23ce800deb13999b0190df04c3540ccb5"
+  name = "github.com/ncabatoff/go-seq"
+  packages = ["seq"]
+  pruneopts = "UT"
+  revision = "f685b1aeb089d74c6fb02336d96dfa3ff4dab0ac"
 
 [[projects]]
   branch = "add-proc-status"
@@ -145,10 +145,10 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/fatih/structs",
     "github.com/google/go-cmp/cmp",
     "github.com/google/go-cmp/cmp/cmpopts",
     "github.com/ncabatoff/fakescraper",
+    "github.com/ncabatoff/go-seq/seq",
     "github.com/ncabatoff/procfs",
     "github.com/prometheus/client_golang/prometheus",
     "gopkg.in/check.v1",

@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/fatih/structs"
+	seq "github.com/ncabatoff/go-seq/seq"
 	common "github.com/ncabatoff/process-exporter"
 )
 
@@ -101,46 +101,11 @@ type (
 	}
 )
 
-func lessUpdateGroupName(x, y Update) bool {
-	return x.GroupName < y.GroupName
-}
+func lessUpdateGroupName(x, y Update) bool { return x.GroupName < y.GroupName }
 
-func lessThreadUpdate(x, y ThreadUpdate) bool {
-	if x.ThreadName > y.ThreadName {
-		return false
-	}
-	if x.ThreadName < y.ThreadName {
-		return true
-	}
-	return lessCounts(Counts(x.Latest), Counts(y.Latest))
-}
+func lessThreadUpdate(x, y ThreadUpdate) bool { return seq.Compare(x, y) < 0 }
 
-func lessCounts(x, y Counts) bool {
-	xvs, yvs := structs.New(x).Values(), structs.New(y).Values()
-	for i, xi := range xvs {
-		switch xv := xi.(type) {
-		case float64:
-			yv := yvs[i].(float64)
-			if xv < yv {
-				return true
-			} else if xv > yv {
-				return false
-			}
-
-		case uint64:
-			yv := yvs[i].(uint64)
-			if xv < yv {
-				return true
-			} else if xv > yv {
-				return false
-			}
-
-		default:
-			panic("only know how to handle uint64 and float64")
-		}
-	}
-	return false
-}
+func lessCounts(x, y Counts) bool { return seq.Compare(x, y) < 0 }
 
 func (tp *trackedProc) getUpdate() Update {
 	u := Update{

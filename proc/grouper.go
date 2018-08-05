@@ -3,6 +3,7 @@ package proc
 import (
 	"time"
 
+	seq "github.com/ncabatoff/go-seq/seq"
 	common "github.com/ncabatoff/process-exporter"
 )
 
@@ -43,21 +44,7 @@ type (
 
 // Returns true if x < y.  Test designers should ensure they always have
 // a unique name/numthreads combination for each group.
-func lessThreads(x, y Threads) bool {
-	if x.Name > y.Name {
-		return false
-	}
-	if x.Name < y.Name {
-		return true
-	}
-	if x.NumThreads > y.NumThreads {
-		return false
-	}
-	if x.NumThreads < y.NumThreads {
-		return true
-	}
-	return lessCounts(x.Counts, y.Counts)
-}
+func lessThreads(x, y Threads) bool { return seq.Compare(x, y) < 0 }
 
 // NewGrouper creates a grouper.
 func NewGrouper(namer common.MatchNamer, trackChildren, trackThreads, alwaysRecheck bool) *Grouper {

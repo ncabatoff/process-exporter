@@ -38,12 +38,12 @@
   name = "github.com/ncabatoff/fakescraper"
 
 [[constraint]]
-  name = "github.com/prometheus/client_golang"
-  version = "0.8.0"
+  branch = "add-proc-status"
+  name = "github.com/ncabatoff/procfs"
 
 [[constraint]]
-  branch = "master"
-  name = "github.com/prometheus/procfs"
+  name = "github.com/prometheus/client_golang"
+  version = "0.8.0"
 
 [[constraint]]
   branch = "v1"

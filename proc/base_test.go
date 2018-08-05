@@ -47,7 +47,7 @@ func newNamer(names ...string) namer {
 	return nr
 }
 
-func (n namer) MatchAndName(nacl common.NameAndCmdline) (bool, string) {
+func (n namer) MatchAndName(nacl common.ProcAttributes) (bool, string) {
 	if _, ok := n[nacl.Name]; ok {
 		return true, nacl.Name
 	}
@@ -56,7 +56,7 @@ func (n namer) MatchAndName(nacl common.NameAndCmdline) (bool, string) {
 
 func newProcIDStatic(pid, ppid int, startTime uint64, name string, cmdline []string) (ID, Static) {
 	return ID{pid, startTime},
-		Static{name, cmdline, ppid, time.Unix(int64(startTime), 0).UTC()}
+		Static{name, cmdline, ppid, time.Unix(int64(startTime), 0).UTC(), 1000}
 }
 
 func newProc(pid int, name string, m Metrics) IDInfo {

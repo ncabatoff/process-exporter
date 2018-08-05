@@ -236,7 +236,7 @@ func parseNameMapper(s string) (*nameMapperRegex, error) {
 	return &nameMapperRegex{mapper}, nil
 }
 
-func (nmr *nameMapperRegex) MatchAndName(nacl common.NameAndCmdline) (bool, string) {
+func (nmr *nameMapperRegex) MatchAndName(nacl common.ProcAttributes) (bool, string) {
 	if pregex, ok := nmr.mapping[nacl.Name]; ok {
 		if pregex == nil {
 			return true, nacl.Name

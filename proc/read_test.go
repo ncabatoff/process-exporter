@@ -62,10 +62,11 @@ func TestReadFixture(t *testing.T) {
 
 	stime, _ := time.Parse(time.RFC3339Nano, "2017-10-19T22:52:51.19Z")
 	wantstatic := Static{
-		Name:      "process-exporte",
-		Cmdline:   []string{"./process-exporter", "-procnames", "bash"},
-		ParentPid: 10884,
-		StartTime: stime,
+		Name:         "process-exporte",
+		Cmdline:      []string{"./process-exporter", "-procnames", "bash"},
+		ParentPid:    10884,
+		StartTime:    stime,
+		EffectiveUID: 1000,
 	}
 	if diff := cmp.Diff(pii.Static, wantstatic); diff != "" {
 		t.Errorf("static differs: (-got +want)\n%s", diff)

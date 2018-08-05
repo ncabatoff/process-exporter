@@ -16,7 +16,7 @@ import (
 type (
 	Matcher interface {
 		// Match returns empty string for no match, or the group name on success.
-		Match(common.NameAndCmdline) bool
+		Match(common.ProcAttributes) bool
 	}
 
 	FirstMatcher []common.MatchNamer
@@ -49,14 +49,15 @@ type (
 	}
 
 	templateParams struct {
-		Comm    string
-		ExeBase string
-		ExeFull string
-		Matches map[string]string
+		Comm     string
+		ExeBase  string
+		ExeFull  string
+		Username string
+		Matches  map[string]string
 	}
 )
 
-func (f FirstMatcher) MatchAndName(nacl common.NameAndCmdline) (bool, string) {
+func (f FirstMatcher) MatchAndName(nacl common.ProcAttributes) (bool, string) {
 	for _, m := range f {
 		if matched, name := m.MatchAndName(nacl); matched {
 			return true, name
@@ -65,7 +66,7 @@ func (f FirstMatcher) MatchAndName(nacl common.NameAndCmdline) (bool, string) {
 	return false, ""
 }
 
-func (m *matchNamer) MatchAndName(nacl common.NameAndCmdline) (bool, string) {
+func (m *matchNamer) MatchAndName(nacl common.ProcAttributes) (bool, string) {
 	if !m.Match(nacl) {
 		return false, ""
 	}
@@ -87,20 +88,21 @@ func (m *matchNamer) MatchAndName(nacl common.NameAndCmdline) (bool, string) {
 
 	var buf bytes.Buffer
 	m.template.Execute(&buf, &templateParams{
-		Comm:    nacl.Name,
-		ExeBase: exebase,
-		ExeFull: exefull,
-		Matches: matches,
+		Comm:     nacl.Name,
+		ExeBase:  exebase,
+		ExeFull:  exefull,
+		Matches:  matches,
+		Username: nacl.Username,
 	})
 	return true, buf.String()
 }
 
-func (m *commMatcher) Match(nacl common.NameAndCmdline) bool {
+func (m *commMatcher) Match(nacl common.ProcAttributes) bool {
 	_, found := m.comms[nacl.Name]
 	return found
 }
 
-func (m *exeMatcher) Match(nacl common.NameAndCmdline) bool {
+func (m *exeMatcher) Match(nacl common.ProcAttributes) bool {
 	if len(nacl.Cmdline) == 0 {
 		return false
 	}
@@ -116,7 +118,7 @@ func (m *exeMatcher) Match(nacl common.NameAndCmdline) bool {
 	return fqpath == nacl.Cmdline[0]
 }
 
-func (m *cmdlineMatcher) Match(nacl common.NameAndCmdline) bool {
+func (m *cmdlineMatcher) Match(nacl common.ProcAttributes) bool {
 	for _, regex := range m.regexes {
 		captures := regex.FindStringSubmatch(strings.Join(nacl.Cmdline, " "))
 		if m.captures == nil {
@@ -134,7 +136,7 @@ func (m *cmdlineMatcher) Match(nacl common.NameAndCmdline) bool {
 	return true
 }
 
-func (m andMatcher) Match(nacl common.NameAndCmdline) bool {
+func (m andMatcher) Match(nacl common.ProcAttributes) bool {
 	for _, matcher := range m {
 		if !matcher.Match(nacl) {
 			return false

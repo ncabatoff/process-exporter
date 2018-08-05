@@ -99,6 +99,7 @@ Template variables available:
 - `{{.Comm}}` contains the basename of the original executable, i.e. 2nd field in `/proc/<pid>/stat`
 - `{{.ExeBase}}` contains the basename of the executable
 - `{{.ExeFull}}` contains the fully qualified path of the executable
+- `{{.Username}}` contains the username of the effective user
 - `{{.Matches}}` map contains all the matches resulting from applying cmdline regexps
 
 #### Using a config file: process selectors

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/prometheus/procfs"
+	"github.com/ncabatoff/procfs"
 )
 
 // ErrProcNotExist indicates a process couldn't be read because it doesn't exist,
@@ -28,10 +28,11 @@ type (
 
 	// Static contains data read from /proc/pid/*
 	Static struct {
-		Name      string
-		Cmdline   []string
-		ParentPid int
-		StartTime time.Time
+		Name         string
+		Cmdline      []string
+		ParentPid    int
+		StartTime    time.Time
+		EffectiveUID int
 	}
 
 	// Counts are metric counters common to threads and processes and groups.
@@ -122,6 +123,7 @@ type (
 		procfs.Proc
 		procid  *ID
 		stat    *procfs.ProcStat
+		status  *procfs.ProcStatus
 		cmdline []string
 		io      *procfs.ProcIO
 		fs      *FS
@@ -260,6 +262,18 @@ func (p *proccache) getStat() (procfs.ProcStat, error) {
 	return *p.stat, nil
 }
 
+func (p *proccache) getStatus() (procfs.ProcStatus, error) {
+	if p.status == nil {
+		status, err := p.Proc.NewStatus()
+		if err != nil {
+			return procfs.ProcStatus{}, err
+		}
+		p.status = &status
+	}
+
+	return *p.status, nil
+}
+
 // GetProcID implements Proc.
 func (p *proccache) GetProcID() (ID, error) {
 	if p.procid == nil {
@@ -302,6 +316,7 @@ func (p *proccache) GetStatic() (Static, error) {
 	if err != nil {
 		return Static{}, err
 	}
+
 	// /proc/<pid>/stat is normally world-readable.
 	stat, err := p.getStat()
 	if err != nil {
@@ -309,11 +324,19 @@ func (p *proccache) GetStatic() (Static, error) {
 	}
 	startTime := time.Unix(int64(p.fs.BootTime), 0).UTC()
 	startTime = startTime.Add(time.Second / userHZ * time.Duration(stat.Starttime))
+
+	// /proc/<pid>/status is normally world-readable.
+	status, err := p.getStatus()
+	if err != nil {
+		return Static{}, err
+	}
+
 	return Static{
-		Name:      stat.Comm,
-		Cmdline:   cmdline,
-		ParentPid: stat.PPID,
-		StartTime: startTime,
+		Name:         stat.Comm,
+		Cmdline:      cmdline,
+		ParentPid:    stat.PPID,
+		StartTime:    startTime,
+		EffectiveUID: status.UIDEffective,
 	}, nil
 }
 

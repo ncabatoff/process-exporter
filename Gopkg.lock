@@ -56,6 +56,17 @@
   revision = "15938421d91a82d197de7fc59aebcac65c43407d"
 
 [[projects]]
+  branch = "add-proc-status"
+  name = "github.com/ncabatoff/procfs"
+  packages = [
+    ".",
+    "internal/util",
+    "nfs",
+    "xfs"
+  ]
+  revision = "a06a8780a11fd2ea6093f22b889a02d2f5f53b17"
+
+[[projects]]
   name = "github.com/prometheus/client_golang"
   packages = ["prometheus"]
   revision = "c5b7fccd204277076155f10851dad72b76a49317"
@@ -103,6 +114,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "c51499e55efb8e4832f789c8ef34652e23b9a46f33a6932292d9e0df8da0d959"
+  inputs-digest = "c8cbf5b5fd8eefbfa9c56915eb996f1d8e673604ec291455778de92bb9a87528"
   solver-name = "gps-cdcl"
   solver-version = 1

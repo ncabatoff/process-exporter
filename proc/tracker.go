@@ -2,6 +2,8 @@ package proc
 
 import (
 	"fmt"
+	"os/user"
+	"strconv"
 	"time"
 
 	"github.com/fatih/structs"
@@ -27,6 +29,7 @@ type (
 		trackThreads bool
 		// never ignore processes, i.e. always re-check untracked processes in case comm has changed
 		alwaysRecheck bool
+		username      map[int]string
 	}
 
 	// Delta is an alias of Counts used to signal that its contents are not
@@ -166,6 +169,7 @@ func NewTracker(namer common.MatchNamer, trackChildren, trackThreads, alwaysRech
 		trackChildren: trackChildren,
 		trackThreads:  trackThreads,
 		alwaysRecheck: alwaysRecheck,
+		username:      make(map[int]string),
 	}
 }
 
@@ -353,6 +357,23 @@ func (t *Tracker) checkAncestry(idinfo IDInfo, newprocs map[ID]IDInfo) string {
 	return ""
 }
 
+func (t *Tracker) lookupUid(uid int) string {
+	if name, ok := t.username[uid]; ok {
+		return name
+	}
+
+	var name string
+	uidstr := strconv.Itoa(uid)
+	u, err := user.LookupId(uidstr)
+	if err != nil {
+		name = uidstr
+	} else {
+		name = u.Username
+	}
+	t.username[uid] = name
+	return name
+}
+
 // Update modifies the tracker's internal state based on what it reads from
 // iter.  Tracks any new procs the namer wants tracked, and updates
 // its metrics for existing tracked procs.  Returns nonfatal errors
@@ -366,7 +387,11 @@ func (t *Tracker) Update(iter Iter) (CollectErrors, []Update, error) {
 	// Step 1: track any new proc that should be tracked based on its name and cmdline.
 	untracked := make(map[ID]IDInfo)
 	for _, idinfo := range newProcs {
-		nacl := common.NameAndCmdline{Name: idinfo.Name, Cmdline: idinfo.Cmdline}
+		nacl := common.ProcAttributes{
+			Name:     idinfo.Name,
+			Cmdline:  idinfo.Cmdline,
+			Username: t.lookupUid(idinfo.EffectiveUID),
+		}
 		wanted, gname := t.namer.MatchAndName(nacl)
 		if wanted {
 			t.track(gname, idinfo)

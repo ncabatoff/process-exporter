@@ -242,6 +242,12 @@ Number of major page faults based on /proc/[pid]/stat field majflt(12).
 
 Number of minor page faults based on /proc/[pid]/stat field minflt(10).
 
+### context_switches_total counter
+
+Number of context switches based on /proc/[pid]/status fields voluntary_ctxt_switches
+and nonvoluntary_ctxt_switches.  The extra label `ctxswitchtype` can have two values:
+`voluntary` and `nonvoluntary`.
+
 ### memory_bytes gauge
 
 Number of bytes of memory used.  The extra label `memtype` can have two values:
@@ -325,6 +331,10 @@ Same as major_page_faults_total, but broken down per-thread subgroup.
 ### thread_minor_page_faults_total counter
 
 Same as minor_page_faults_total, but broken down per-thread subgroup.
+
+### thread_context_switches_total counter
+
+Same as context_switches_total, but broken down per-thread subgroup.
 
 ## Instrumentation cost
 

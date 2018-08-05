@@ -99,15 +99,15 @@ func TestTrackerMetrics(t *testing.T) {
 		want Update
 	}{
 		{
-			piinfost(p, n, Counts{1, 2, 3, 4, 5, 6}, Memory{7, 8, 0},
+			piinfost(p, n, Counts{1, 2, 3, 4, 5, 6, 0, 0}, Memory{7, 8, 0},
 				Filedesc{1, 10}, 9, States{Sleeping: 1}),
 			Update{n, Delta{}, Memory{7, 8, 0}, Filedesc{1, 10}, tm,
 				9, States{Sleeping: 1}, nil},
 		},
 		{
-			piinfost(p, n, Counts{2, 3, 4, 5, 6, 7}, Memory{1, 2, 0},
+			piinfost(p, n, Counts{2, 3, 4, 5, 6, 7, 0, 0}, Memory{1, 2, 0},
 				Filedesc{2, 20}, 1, States{Running: 1}),
-			Update{n, Delta{1, 1, 1, 1, 1, 1}, Memory{1, 2, 0},
+			Update{n, Delta{1, 1, 1, 1, 1, 1, 0, 0}, Memory{1, 2, 0},
 				Filedesc{2, 20}, tm, 1, States{Running: 1}, nil},
 		},
 	}
@@ -134,8 +134,8 @@ func TestTrackerThreads(t *testing.T) {
 			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 1, States{}, nil},
 		}, {
 			piinfot(p, n, Counts{}, Memory{}, Filedesc{1, 1}, []Thread{
-				{ThreadID(ID{p, 0}), "t1", Counts{1, 2, 3, 4, 5, 6}},
-				{ThreadID(ID{p + 1, 0}), "t2", Counts{1, 1, 1, 1, 1, 1}},
+				{ThreadID(ID{p, 0}), "t1", Counts{1, 2, 3, 4, 5, 6, 0, 0}},
+				{ThreadID(ID{p + 1, 0}), "t2", Counts{1, 1, 1, 1, 1, 1, 0, 0}},
 			}),
 			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{},
 				[]ThreadUpdate{
@@ -145,26 +145,26 @@ func TestTrackerThreads(t *testing.T) {
 			},
 		}, {
 			piinfot(p, n, Counts{}, Memory{}, Filedesc{1, 1}, []Thread{
-				{ThreadID(ID{p, 0}), "t1", Counts{2, 3, 4, 5, 6, 7}},
-				{ThreadID(ID{p + 1, 0}), "t2", Counts{2, 2, 2, 2, 2, 2}},
-				{ThreadID(ID{p + 2, 0}), "t2", Counts{1, 1, 1, 1, 1, 1}},
+				{ThreadID(ID{p, 0}), "t1", Counts{2, 3, 4, 5, 6, 7, 0, 0}},
+				{ThreadID(ID{p + 1, 0}), "t2", Counts{2, 2, 2, 2, 2, 2, 0, 0}},
+				{ThreadID(ID{p + 2, 0}), "t2", Counts{1, 1, 1, 1, 1, 1, 0, 0}},
 			}),
 			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 3, States{},
 				[]ThreadUpdate{
-					{"t1", Delta{1, 1, 1, 1, 1, 1}},
-					{"t2", Delta{1, 1, 1, 1, 1, 1}},
+					{"t1", Delta{1, 1, 1, 1, 1, 1, 0, 0}},
+					{"t2", Delta{1, 1, 1, 1, 1, 1, 0, 0}},
 					{"t2", Delta{}},
 				},
 			},
 		}, {
 			piinfot(p, n, Counts{}, Memory{}, Filedesc{1, 1}, []Thread{
-				{ThreadID(ID{p, 0}), "t1", Counts{2, 3, 4, 5, 6, 7}},
-				{ThreadID(ID{p + 2, 0}), "t2", Counts{1, 2, 3, 4, 5, 6}},
+				{ThreadID(ID{p, 0}), "t1", Counts{2, 3, 4, 5, 6, 7, 0, 0}},
+				{ThreadID(ID{p + 2, 0}), "t2", Counts{1, 2, 3, 4, 5, 6, 0, 0}},
 			}),
 			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{},
 				[]ThreadUpdate{
 					{"t1", Delta{}},
-					{"t2", Delta{0, 1, 2, 3, 4, 5}},
+					{"t2", Delta{0, 1, 2, 3, 4, 5, 0, 0}},
 				},
 			},
 		},

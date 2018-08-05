@@ -108,6 +108,12 @@ var (
 		[]string{"groupname"},
 		nil)
 
+	contextSwitchesDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_context_switches_total",
+		"Context switches",
+		[]string{"groupname", "ctxswitchtype"},
+		nil)
+
 	membytesDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_memory_bytes",
 		"number of bytes of memory in use",
@@ -190,6 +196,12 @@ var (
 		"namedprocess_namegroup_thread_minor_page_faults_total",
 		"Minor page faults for these threads",
 		[]string{"groupname", "threadname"},
+		nil)
+
+	threadContextSwitchesDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_thread_context_switches_total",
+		"Context switches for these threads",
+		[]string{"groupname", "threadname", "ctxswitchtype"},
 		nil)
 )
 
@@ -412,6 +424,7 @@ func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- startTimeDesc
 	ch <- majorPageFaultsDesc
 	ch <- minorPageFaultsDesc
+	ch <- contextSwitchesDesc
 	ch <- numThreadsDesc
 	ch <- statesDesc
 	ch <- scrapeErrorsDesc
@@ -422,6 +435,7 @@ func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- threadIoBytesDesc
 	ch <- threadMajorPageFaultsDesc
 	ch <- threadMinorPageFaultsDesc
+	ch <- threadContextSwitchesDesc
 }
 
 // Collect implements prometheus.Collector.
@@ -473,6 +487,10 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 				prometheus.CounterValue, float64(gcounts.MajorPageFaults), gname)
 			ch <- prometheus.MustNewConstMetric(minorPageFaultsDesc,
 				prometheus.CounterValue, float64(gcounts.MinorPageFaults), gname)
+			ch <- prometheus.MustNewConstMetric(contextSwitchesDesc,
+				prometheus.CounterValue, float64(gcounts.CtxSwitchVoluntary), gname, "voluntary")
+			ch <- prometheus.MustNewConstMetric(contextSwitchesDesc,
+				prometheus.CounterValue, float64(gcounts.CtxSwitchNonvoluntary), gname, "nonvoluntary")
 			ch <- prometheus.MustNewConstMetric(numThreadsDesc,
 				prometheus.GaugeValue, float64(gcounts.NumThreads), gname)
 			ch <- prometheus.MustNewConstMetric(statesDesc,
@@ -508,6 +526,12 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 					ch <- prometheus.MustNewConstMetric(threadMinorPageFaultsDesc,
 						prometheus.CounterValue, float64(thr.MinorPageFaults),
 						gname, thr.Name)
+					ch <- prometheus.MustNewConstMetric(threadContextSwitchesDesc,
+						prometheus.CounterValue, float64(thr.CtxSwitchVoluntary),
+						gname, thr.Name, "voluntary")
+					ch <- prometheus.MustNewConstMetric(threadContextSwitchesDesc,
+						prometheus.CounterValue, float64(thr.CtxSwitchNonvoluntary),
+						gname, thr.Name, "nonvoluntary")
 				}
 			}
 		}

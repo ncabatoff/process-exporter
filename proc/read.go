@@ -37,12 +37,14 @@ type (
 
 	// Counts are metric counters common to threads and processes and groups.
 	Counts struct {
-		CPUUserTime     float64
-		CPUSystemTime   float64
-		ReadBytes       uint64
-		WriteBytes      uint64
-		MajorPageFaults uint64
-		MinorPageFaults uint64
+		CPUUserTime           float64
+		CPUSystemTime         float64
+		ReadBytes             uint64
+		WriteBytes            uint64
+		MajorPageFaults       uint64
+		MinorPageFaults       uint64
+		CtxSwitchVoluntary    uint64
+		CtxSwitchNonvoluntary uint64
 	}
 
 	// Memory describes a proc's memory usage.
@@ -192,6 +194,8 @@ func (c *Counts) Add(c2 Delta) {
 	c.WriteBytes += c2.WriteBytes
 	c.MajorPageFaults += c2.MajorPageFaults
 	c.MinorPageFaults += c2.MinorPageFaults
+	c.CtxSwitchVoluntary += c2.CtxSwitchVoluntary
+	c.CtxSwitchNonvoluntary += c2.CtxSwitchNonvoluntary
 }
 
 // Sub subtracts c2 from the counts.
@@ -202,6 +206,8 @@ func (c Counts) Sub(c2 Counts) Delta {
 	c.WriteBytes -= c2.WriteBytes
 	c.MajorPageFaults -= c2.MajorPageFaults
 	c.MinorPageFaults -= c2.MinorPageFaults
+	c.CtxSwitchVoluntary -= c2.CtxSwitchVoluntary
+	c.CtxSwitchNonvoluntary -= c2.CtxSwitchNonvoluntary
 	return Delta(c)
 }
 
@@ -350,18 +356,28 @@ func (p proc) GetCounts() (Counts, int, error) {
 		return Counts{}, 0, err
 	}
 
+	status, err := p.getStatus()
+	if err != nil {
+		if err == os.ErrNotExist {
+			err = ErrProcNotExist
+		}
+		return Counts{}, 0, err
+	}
+
 	io, err := p.getIo()
 	softerrors := 0
 	if err != nil {
 		softerrors++
 	}
 	return Counts{
-		CPUUserTime:     float64(stat.UTime) / userHZ,
-		CPUSystemTime:   float64(stat.STime) / userHZ,
-		ReadBytes:       io.ReadBytes,
-		WriteBytes:      io.WriteBytes,
-		MajorPageFaults: uint64(stat.MajFlt),
-		MinorPageFaults: uint64(stat.MinFlt),
+		CPUUserTime:           float64(stat.UTime) / userHZ,
+		CPUSystemTime:         float64(stat.STime) / userHZ,
+		ReadBytes:             io.ReadBytes,
+		WriteBytes:            io.WriteBytes,
+		MajorPageFaults:       uint64(stat.MajFlt),
+		MinorPageFaults:       uint64(stat.MinFlt),
+		CtxSwitchVoluntary:    uint64(status.VoluntaryCtxtSwitches),
+		CtxSwitchNonvoluntary: uint64(status.NonvoluntaryCtxtSwitches),
 	}, softerrors, nil
 }
 

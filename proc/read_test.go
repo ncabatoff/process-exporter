@@ -74,12 +74,14 @@ func TestReadFixture(t *testing.T) {
 
 	wantmetrics := Metrics{
 		Counts: Counts{
-			CPUUserTime:     0.1,
-			CPUSystemTime:   0.04,
-			ReadBytes:       1814455,
-			WriteBytes:      0,
-			MajorPageFaults: 0x2ff,
-			MinorPageFaults: 0x643,
+			CPUUserTime:           0.1,
+			CPUSystemTime:         0.04,
+			ReadBytes:             1814455,
+			WriteBytes:            0,
+			MajorPageFaults:       0x2ff,
+			MinorPageFaults:       0x643,
+			CtxSwitchVoluntary:    72,
+			CtxSwitchNonvoluntary: 6,
 		},
 		Memory: Memory{
 			ResidentBytes: 0x7b1000,

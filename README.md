@@ -252,6 +252,8 @@ Number of bytes of memory used.  The extra label `memtype` can have two values:
 
 *virtual*: Field vsize(23) from /proc/[pid]/stat, virtual memory size.
 
+*swapped*: Field VmSwap from /proc/[pid]/status, translated from KB to bytes.
+
 ### open_filedesc gauge
 
 Number of file descriptors, based on counting how many entries are in the directory

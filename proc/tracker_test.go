@@ -99,15 +99,15 @@ func TestTrackerMetrics(t *testing.T) {
 		want Update
 	}{
 		{
-			piinfost(p, n, Counts{1, 2, 3, 4, 5, 6}, Memory{7, 8},
+			piinfost(p, n, Counts{1, 2, 3, 4, 5, 6}, Memory{7, 8, 0},
 				Filedesc{1, 10}, 9, States{Sleeping: 1}),
-			Update{n, Delta{}, Memory{7, 8}, Filedesc{1, 10}, tm,
+			Update{n, Delta{}, Memory{7, 8, 0}, Filedesc{1, 10}, tm,
 				9, States{Sleeping: 1}, nil},
 		},
 		{
-			piinfost(p, n, Counts{2, 3, 4, 5, 6, 7}, Memory{1, 2},
+			piinfost(p, n, Counts{2, 3, 4, 5, 6, 7}, Memory{1, 2, 0},
 				Filedesc{2, 20}, 1, States{Running: 1}),
-			Update{n, Delta{1, 1, 1, 1, 1, 1}, Memory{1, 2},
+			Update{n, Delta{1, 1, 1, 1, 1, 1}, Memory{1, 2, 0},
 				Filedesc{2, 20}, tm, 1, States{Running: 1}, nil},
 		},
 	}

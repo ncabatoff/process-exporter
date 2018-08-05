@@ -75,6 +75,7 @@ func groupadd(grp Group, ts Update) Group {
 	grp.Procs++
 	grp.Memory.ResidentBytes += ts.Memory.ResidentBytes
 	grp.Memory.VirtualBytes += ts.Memory.VirtualBytes
+	grp.Memory.VmSwapBytes += ts.Memory.VmSwapBytes
 	if ts.Filedesc.Open != -1 {
 		grp.OpenFDs += uint64(ts.Filedesc.Open)
 	}

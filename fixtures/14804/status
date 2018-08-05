@@ -25,7 +25,7 @@ VmExe:	    3692 kB
 VmLib:	       0 kB
 VmPTE:	      48 kB
 VmPMD:	      20 kB
-VmSwap:	       0 kB
+VmSwap:	      10 kB
 HugetlbPages:	       0 kB
 Threads:	7
 SigQ:	0/31421

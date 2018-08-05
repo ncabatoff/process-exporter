@@ -84,6 +84,7 @@ func TestReadFixture(t *testing.T) {
 		Memory: Memory{
 			ResidentBytes: 0x7b1000,
 			VirtualBytes:  0x1061000,
+			VmSwapBytes:   0x2800,
 		},
 		Filedesc: Filedesc{
 			Open:  5,

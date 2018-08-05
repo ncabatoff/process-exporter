@@ -49,6 +49,7 @@ type (
 	Memory struct {
 		ResidentBytes uint64
 		VirtualBytes  uint64
+		VmSwapBytes   uint64
 	}
 
 	// Filedesc describes a proc's file descriptor usage and soft limit.
@@ -403,6 +404,11 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 	// Ditto for states
 	states, _ := p.GetStates()
 
+	status, err := p.getStatus()
+	if err != nil {
+		return Metrics{}, 0, err
+	}
+
 	numfds, err := p.Proc.FileDescriptorsLen()
 	if err != nil {
 		numfds = -1
@@ -419,6 +425,7 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 		Memory: Memory{
 			ResidentBytes: uint64(stat.ResidentMemory()),
 			VirtualBytes:  uint64(stat.VirtualMemory()),
+			VmSwapBytes:   uint64(status.VmSwapKB * 1024),
 		},
 		Filedesc: Filedesc{
 			Open:  int64(numfds),

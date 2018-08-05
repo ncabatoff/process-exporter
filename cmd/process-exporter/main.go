@@ -453,6 +453,8 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 				prometheus.GaugeValue, float64(gcounts.Memory.ResidentBytes), gname, "resident")
 			ch <- prometheus.MustNewConstMetric(membytesDesc,
 				prometheus.GaugeValue, float64(gcounts.Memory.VirtualBytes), gname, "virtual")
+			ch <- prometheus.MustNewConstMetric(membytesDesc,
+				prometheus.GaugeValue, float64(gcounts.Memory.VmSwapBytes), gname, "swapped")
 			ch <- prometheus.MustNewConstMetric(startTimeDesc,
 				prometheus.GaugeValue, float64(gcounts.OldestStartTime.Unix()), gname)
 			ch <- prometheus.MustNewConstMetric(openFDsDesc,

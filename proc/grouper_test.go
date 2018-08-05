@@ -45,30 +45,30 @@ func TestGrouperBasic(t *testing.T) {
 	}{
 		{
 			[]IDInfo{
-				piinfost(p1, n1, Counts{1, 2, 3, 4, 5, 6}, Memory{7, 8},
+				piinfost(p1, n1, Counts{1, 2, 3, 4, 5, 6}, Memory{7, 8, 0},
 					Filedesc{4, 400}, 2, States{Other: 1}),
-				piinfost(p2, n2, Counts{2, 3, 4, 5, 6, 7}, Memory{8, 9},
+				piinfost(p2, n2, Counts{2, 3, 4, 5, 6, 7}, Memory{8, 9, 0},
 					Filedesc{40, 400}, 3, States{Waiting: 1}),
 			},
 			GroupByName{
-				"g1": Group{Counts{}, States{Other: 1}, 1, Memory{7, 8}, starttime,
+				"g1": Group{Counts{}, States{Other: 1}, 1, Memory{7, 8, 0}, starttime,
 					4, 0.01, 2, nil},
-				"g2": Group{Counts{}, States{Waiting: 1}, 1, Memory{8, 9}, starttime,
+				"g2": Group{Counts{}, States{Waiting: 1}, 1, Memory{8, 9, 0}, starttime,
 					40, 0.1, 3, nil},
 			},
 		},
 		{
 			[]IDInfo{
 				piinfost(p1, n1, Counts{2, 3, 4, 5, 6, 7},
-					Memory{6, 7}, Filedesc{100, 400}, 4, States{Zombie: 1}),
+					Memory{6, 7, 0}, Filedesc{100, 400}, 4, States{Zombie: 1}),
 				piinfost(p2, n2, Counts{4, 5, 6, 7, 8, 9},
-					Memory{9, 8}, Filedesc{400, 400}, 2, States{Running: 1}),
+					Memory{9, 8, 0}, Filedesc{400, 400}, 2, States{Running: 1}),
 			},
 			GroupByName{
 				"g1": Group{Counts{1, 1, 1, 1, 1, 1}, States{Zombie: 1}, 1,
-					Memory{6, 7}, starttime, 100, 0.25, 4, nil},
+					Memory{6, 7, 0}, starttime, 100, 0.25, 4, nil},
 				"g2": Group{Counts{2, 2, 2, 2, 2, 2}, States{Running: 1}, 1,
-					Memory{9, 8}, starttime, 400, 1, 2, nil},
+					Memory{9, 8, 0}, starttime, 400, 1, 2, nil},
 			},
 		},
 	}
@@ -95,10 +95,10 @@ func TestGrouperProcJoin(t *testing.T) {
 	}{
 		{
 			[]IDInfo{
-				piinfo(p1, n1, Counts{1, 2, 3, 4, 5, 6}, Memory{3, 4}, Filedesc{4, 400}, 2),
+				piinfo(p1, n1, Counts{1, 2, 3, 4, 5, 6}, Memory{3, 4, 0}, Filedesc{4, 400}, 2),
 			},
 			GroupByName{
-				"g1": Group{Counts{}, States{}, 1, Memory{3, 4}, starttime, 4, 0.01, 2, nil},
+				"g1": Group{Counts{}, States{}, 1, Memory{3, 4, 0}, starttime, 4, 0.01, 2, nil},
 			},
 		}, {
 			// The counts for pid2 won't be factored into the total yet because we only add
@@ -106,24 +106,24 @@ func TestGrouperProcJoin(t *testing.T) {
 			// affected though.
 			[]IDInfo{
 				piinfost(p1, n1, Counts{3, 4, 5, 6, 7, 8},
-					Memory{3, 4}, Filedesc{4, 400}, 2, States{Running: 1}),
+					Memory{3, 4, 0}, Filedesc{4, 400}, 2, States{Running: 1}),
 				piinfost(p2, n2, Counts{1, 1, 1, 1, 1, 1},
-					Memory{1, 2}, Filedesc{40, 400}, 3, States{Sleeping: 1}),
+					Memory{1, 2, 0}, Filedesc{40, 400}, 3, States{Sleeping: 1}),
 			},
 			GroupByName{
 				"g1": Group{Counts{2, 2, 2, 2, 2, 2}, States{Running: 1, Sleeping: 1}, 2,
-					Memory{4, 6}, starttime, 44, 0.1, 5, nil},
+					Memory{4, 6, 0}, starttime, 44, 0.1, 5, nil},
 			},
 		}, {
 			[]IDInfo{
 				piinfost(p1, n1, Counts{4, 5, 6, 7, 8, 9},
-					Memory{1, 5}, Filedesc{4, 400}, 2, States{Running: 1}),
+					Memory{1, 5, 0}, Filedesc{4, 400}, 2, States{Running: 1}),
 				piinfost(p2, n2, Counts{2, 2, 2, 2, 2, 2},
-					Memory{2, 4}, Filedesc{40, 400}, 3, States{Running: 1}),
+					Memory{2, 4, 0}, Filedesc{40, 400}, 3, States{Running: 1}),
 			},
 			GroupByName{
 				"g1": Group{Counts{4, 4, 4, 4, 4, 4}, States{Running: 2}, 2,
-					Memory{3, 9}, starttime, 44, 0.1, 5, nil},
+					Memory{3, 9, 0}, starttime, 44, 0.1, 5, nil},
 			},
 		},
 	}
@@ -150,18 +150,18 @@ func TestGrouperNonDecreasing(t *testing.T) {
 	}{
 		{
 			[]IDInfo{
-				piinfo(p1, n1, Counts{3, 4, 5, 6, 7, 8}, Memory{3, 4}, Filedesc{4, 400}, 2),
-				piinfo(p2, n2, Counts{1, 1, 1, 1, 1, 1}, Memory{1, 2}, Filedesc{40, 400}, 3),
+				piinfo(p1, n1, Counts{3, 4, 5, 6, 7, 8}, Memory{3, 4, 0}, Filedesc{4, 400}, 2),
+				piinfo(p2, n2, Counts{1, 1, 1, 1, 1, 1}, Memory{1, 2, 0}, Filedesc{40, 400}, 3),
 			},
 			GroupByName{
-				"g1": Group{Counts{}, States{}, 2, Memory{4, 6}, starttime, 44, 0.1, 5, nil},
+				"g1": Group{Counts{}, States{}, 2, Memory{4, 6, 0}, starttime, 44, 0.1, 5, nil},
 			},
 		}, {
 			[]IDInfo{
-				piinfo(p1, n1, Counts{4, 5, 6, 7, 8, 9}, Memory{1, 5}, Filedesc{4, 400}, 2),
+				piinfo(p1, n1, Counts{4, 5, 6, 7, 8, 9}, Memory{1, 5, 0}, Filedesc{4, 400}, 2),
 			},
 			GroupByName{
-				"g1": Group{Counts{1, 1, 1, 1, 1, 1}, States{}, 1, Memory{1, 5}, starttime, 4, 0.01, 2, nil},
+				"g1": Group{Counts{1, 1, 1, 1, 1, 1}, States{}, 1, Memory{1, 5, 0}, starttime, 4, 0.01, 2, nil},
 			},
 		}, {
 			[]IDInfo{},

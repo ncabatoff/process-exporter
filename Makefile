@@ -5,7 +5,7 @@ BIN_DIR                 ?= $(shell pwd)
 DOCKER_IMAGE_NAME       ?= ncabatoff/process-exporter
 DOCKER_IMAGE_TAG        ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))
 
-all: format vet test build
+all: format vet test build integ
 
 style:
 	@echo ">> checking code style"
@@ -27,8 +27,12 @@ build:
 	@echo ">> building code"
 	cd cmd/process-exporter; go build -o ../../process-exporter -a -tags netgo
 
+integ:
+	@echo ">> smoke testing process-exporter"
+	./process-exporter -config.path packaging/conf/all.yaml -once-to-stdout |grep -q namedprocess_namegroup_write_bytes_total
+
 docker:
 	@echo ">> building docker image"
 	@docker build -t "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" .
 
-.PHONY: all style format test vet build docker
+.PHONY: all style format test vet build integ docker

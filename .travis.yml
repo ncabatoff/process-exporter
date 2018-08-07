@@ -21,7 +21,7 @@ install:
   - dep ensure
 
 script:
-  - make style vet test
+  - make style vet test build integ
 
 after_success:
   - docker login -u $DOCKER_USER -p "$DOCKER_PASSWORD"

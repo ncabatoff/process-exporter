@@ -69,11 +69,11 @@
   name = "github.com/ncabatoff/go-seq"
   packages = ["seq"]
   pruneopts = "UT"
-  revision = "f685b1aeb089d74c6fb02336d96dfa3ff4dab0ac"
+  revision = "b08ef85ed83364cba413c98a94bbd4169a0ce70b"
 
 [[projects]]
   branch = "add-proc-status"
-  digest = "1:aa1e48912e44fa6999deaf151cd45e11d31fe78fe575e07a43c23a01ca207d52"
+  digest = "1:130e937b98280a56fbc62cd75110c6025d242e12e8494d0bba486b6bd18cb129"
   name = "github.com/ncabatoff/procfs"
   packages = [
     ".",
@@ -82,7 +82,7 @@
     "xfs",
   ]
   pruneopts = "UT"
-  revision = "a06a8780a11fd2ea6093f22b889a02d2f5f53b17"
+  revision = "d7a0c834ba19e55c3637b3c45821048e502bf9eb"
 
 [[projects]]
   digest = "1:b6221ec0f8903b556e127c449e7106b63e6867170c2d10a7c058623d086f2081"

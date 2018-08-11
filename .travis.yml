@@ -22,6 +22,7 @@ install:
 
 script:
   - make style vet test build integ docker
+  - test -n "$IMAGE_TAG" && make docker DOCKER_IMAGE_TAG=$IMAGE_TAG
 
 after_success:
   - docker login -u $DOCKER_USER -p "$DOCKER_PASSWORD"

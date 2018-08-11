@@ -5,6 +5,7 @@ language: go
 
 env:
   - DEP_VERSION="0.5.0"
+  - IMAGE_TAG=`echo $TRAVIS_TAG|sed s/v//`
 
 go:
   - 1.10.x
@@ -25,5 +26,9 @@ script:
 
 after_success:
   - docker login -u $DOCKER_USER -p "$DOCKER_PASSWORD"
-  - test -n "$TRAVIS_TAG" && docker tag ncabatoff/process-exporter:$TRAVIS_TAG ncabatoff/process-exporter:latest && docker push ncabatoff/process-exporter:$TRAVIS_TAG && docker push ncabatoff/process-exporter:latest
-  - test -n "$TRAVIS_TAG" && curl -sL http://git.io/goreleaser | bash
+  - >
+    test -n "$TRAVIS_TAG" && 
+    docker tag ncabatoff/process-exporter:$IMAGE_TAG ncabatoff/process-exporter:latest && 
+    docker push ncabatoff/process-exporter:$IMAGE_TAG && 
+    docker push ncabatoff/process-exporter:latest && 
+    curl -sL http://git.io/goreleaser | bash

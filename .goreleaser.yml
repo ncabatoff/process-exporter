@@ -34,12 +34,3 @@ nfpm:
 release:
   draft: false
   prerelease: false
-dockers:
-  - image: ncabatoff/process-exporter
-    dockerfile: Dockerfile
-    binary: process-exporter
-    goos: linux
-    goarch: amd64
-    tag_templates:
-      - latest
-      - "{{ .Version }}"

@@ -36,7 +36,7 @@ release:
   prerelease: false
 dockers:
   - image: ncabatoff/process-exporter
-    dockerfile: Dockerfile.goreleaser
+    dockerfile: Dockerfile
     binary: process-exporter
     goos: linux
     goarch: amd64

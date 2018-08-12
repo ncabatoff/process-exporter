@@ -30,7 +30,7 @@ func procInfoIter(ps ...IDInfo) *procIterator {
 }
 
 func allprocs(procpath string) Iter {
-	fs, err := NewFS(procpath)
+	fs, err := NewFS(procpath, false)
 	if err != nil {
 		cwd, _ := os.Getwd()
 		panic("can't read " + procpath + ", cwd=" + cwd + ", err=" + fmt.Sprintf("%v", err))

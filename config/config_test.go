@@ -16,35 +16,35 @@ process_names:
   - exe: 
     - /bin/ksh
 `
-	cfg, err := GetConfig(yml)
+	cfg, err := GetConfig(yml, false)
 	c.Assert(err, IsNil)
-	c.Check(cfg.MatchNamers, HasLen, 3)
+	c.Check(cfg.MatchNamers.matchers, HasLen, 3)
 
 	bash := common.ProcAttributes{Name: "bash", Cmdline: []string{"/bin/bash"}}
 	sh := common.ProcAttributes{Name: "sh", Cmdline: []string{"sh"}}
 	ksh := common.ProcAttributes{Name: "ksh", Cmdline: []string{"/bin/ksh"}}
 
-	found, name := cfg.MatchNamers[0].MatchAndName(bash)
+	found, name := cfg.MatchNamers.matchers[0].MatchAndName(bash)
 	c.Check(found, Equals, true)
 	c.Check(name, Equals, "bash")
-	found, name = cfg.MatchNamers[0].MatchAndName(sh)
+	found, name = cfg.MatchNamers.matchers[0].MatchAndName(sh)
 	c.Check(found, Equals, false)
-	found, name = cfg.MatchNamers[0].MatchAndName(ksh)
+	found, name = cfg.MatchNamers.matchers[0].MatchAndName(ksh)
 	c.Check(found, Equals, false)
 
-	found, name = cfg.MatchNamers[1].MatchAndName(bash)
+	found, name = cfg.MatchNamers.matchers[1].MatchAndName(bash)
 	c.Check(found, Equals, false)
-	found, name = cfg.MatchNamers[1].MatchAndName(sh)
+	found, name = cfg.MatchNamers.matchers[1].MatchAndName(sh)
 	c.Check(found, Equals, true)
 	c.Check(name, Equals, "sh")
-	found, name = cfg.MatchNamers[1].MatchAndName(ksh)
+	found, name = cfg.MatchNamers.matchers[1].MatchAndName(ksh)
 	c.Check(found, Equals, false)
 
-	found, name = cfg.MatchNamers[2].MatchAndName(bash)
+	found, name = cfg.MatchNamers.matchers[2].MatchAndName(bash)
 	c.Check(found, Equals, false)
-	found, name = cfg.MatchNamers[2].MatchAndName(sh)
+	found, name = cfg.MatchNamers.matchers[2].MatchAndName(sh)
 	c.Check(found, Equals, false)
-	found, name = cfg.MatchNamers[2].MatchAndName(ksh)
+	found, name = cfg.MatchNamers.matchers[2].MatchAndName(ksh)
 	c.Check(found, Equals, true)
 	c.Check(name, Equals, "ksh")
 }
@@ -61,17 +61,17 @@ process_names:
     - prometheus
     name: "{{.ExeFull}}"
 `
-	cfg, err := GetConfig(yml)
+	cfg, err := GetConfig(yml, false)
 	c.Assert(err, IsNil)
-	c.Check(cfg.MatchNamers, HasLen, 2)
+	c.Check(cfg.MatchNamers.matchers, HasLen, 2)
 
 	postgres := common.ProcAttributes{Name: "postmaster", Cmdline: []string{"/usr/bin/postmaster", "-D", "/data/pg"}}
-	found, name := cfg.MatchNamers[0].MatchAndName(postgres)
+	found, name := cfg.MatchNamers.matchers[0].MatchAndName(postgres)
 	c.Check(found, Equals, true)
 	c.Check(name, Equals, "postmaster:pg")
 
 	pm := common.ProcAttributes{Name: "prometheus", Cmdline: []string{"/usr/local/bin/prometheus"}}
-	found, name = cfg.MatchNamers[1].MatchAndName(pm)
+	found, name = cfg.MatchNamers.matchers[1].MatchAndName(pm)
 	c.Check(found, Equals, true)
 	c.Check(name, Equals, "/usr/local/bin/prometheus")
 }

@@ -183,8 +183,13 @@ type (
 		procfs.FS
 		BootTime   uint64
 		MountPoint string
+		debug      bool
 	}
 )
+
+func (ii IDInfo) String() string {
+	return fmt.Sprintf("%+v:%+v", ii.ID, ii.Static)
+}
 
 // Add adds c2 to the counts.
 func (c *Counts) Add(c2 Delta) {
@@ -501,7 +506,7 @@ const userHZ = 100
 
 // NewFS returns a new FS mounted under the given mountPoint. It will error
 // if the mount point can't be read.
-func NewFS(mountPoint string) (*FS, error) {
+func NewFS(mountPoint string, debug bool) (*FS, error) {
 	fs, err := procfs.NewFS(mountPoint)
 	if err != nil {
 		return nil, err
@@ -510,7 +515,7 @@ func NewFS(mountPoint string) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FS{fs, stat.BootTime, mountPoint}, nil
+	return &FS{fs, stat.BootTime, mountPoint, debug}, nil
 }
 
 func (fs *FS) threadFs(pid int) (*FS, error) {
@@ -519,7 +524,7 @@ func (fs *FS) threadFs(pid int) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FS{tfs, fs.BootTime, mountPoint}, nil
+	return &FS{tfs, fs.BootTime, mountPoint, false}, nil
 }
 
 // AllProcs implements Source.

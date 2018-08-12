@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -19,8 +20,11 @@ type (
 		Match(common.ProcAttributes) bool
 	}
 
-	FirstMatcher []common.MatchNamer
-	Config       struct {
+	FirstMatcher struct {
+		matchers []common.MatchNamer
+	}
+
+	Config struct {
 		MatchNamers FirstMatcher
 	}
 
@@ -57,13 +61,38 @@ type (
 	}
 )
 
+func (c *cmdlineMatcher) String() string {
+	return fmt.Sprintf("cmdlines: %+v", c.regexes)
+
+}
+
+func (e *exeMatcher) String() string {
+	return fmt.Sprintf("exes: %+v", e.exes)
+}
+
+func (c *commMatcher) String() string {
+	var comms = make([]string, 0, len(c.comms))
+	for cm := range c.comms {
+		comms = append(comms, cm)
+	}
+	return fmt.Sprintf("comms: %+v", comms)
+}
+
+func (f FirstMatcher) String() string {
+	return fmt.Sprintf("%v", f.matchers)
+}
+
 func (f FirstMatcher) MatchAndName(nacl common.ProcAttributes) (bool, string) {
-	for _, m := range f {
+	for _, m := range f.matchers {
 		if matched, name := m.MatchAndName(nacl); matched {
 			return true, name
 		}
 	}
 	return false, ""
+}
+
+func (m *matchNamer) String() string {
+	return fmt.Sprintf("%+v", m.andMatcher)
 }
 
 func (m *matchNamer) MatchAndName(nacl common.ProcAttributes) (bool, string) {
@@ -146,16 +175,19 @@ func (m andMatcher) Match(nacl common.ProcAttributes) bool {
 }
 
 // ReadRecipesFile opens the named file and extracts recipes from it.
-func ReadFile(cfgpath string) (*Config, error) {
+func ReadFile(cfgpath string, debug bool) (*Config, error) {
 	content, err := ioutil.ReadFile(cfgpath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error reading config file %q: %v", cfgpath, err)
 	}
-	return GetConfig(string(content))
+	if debug {
+		log.Printf("Config file %q contents:\n%s", cfgpath, content)
+	}
+	return GetConfig(string(content), debug)
 }
 
 // GetConfig extracts Config from content by parsing it as YAML.
-func GetConfig(content string) (*Config, error) {
+func GetConfig(content string, debug bool) (*Config, error) {
 	var yamldata map[string]interface{}
 
 	err := yaml.Unmarshal([]byte(content), &yamldata)
@@ -177,7 +209,7 @@ func GetConfig(content string) (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse process_name entry %d: %v", i, err)
 		}
-		cfg.MatchNamers = append(cfg.MatchNamers, mn)
+		cfg.MatchNamers.matchers = append(cfg.MatchNamers.matchers, mn)
 	}
 
 	return &cfg, nil

@@ -2,6 +2,7 @@ package proc
 
 import (
 	"fmt"
+	"log"
 	"os/user"
 	"strconv"
 	"time"
@@ -30,6 +31,7 @@ type (
 		// never ignore processes, i.e. always re-check untracked processes in case comm has changed
 		alwaysRecheck bool
 		username      map[int]string
+		debug         bool
 	}
 
 	// Delta is an alias of Counts used to signal that its contents are not
@@ -126,7 +128,7 @@ func (tp *trackedProc) getUpdate() Update {
 }
 
 // NewTracker creates a Tracker.
-func NewTracker(namer common.MatchNamer, trackChildren, trackThreads, alwaysRecheck bool) *Tracker {
+func NewTracker(namer common.MatchNamer, trackChildren, trackThreads, alwaysRecheck, debug bool) *Tracker {
 	return &Tracker{
 		namer:         namer,
 		tracked:       make(map[ID]*trackedProc),
@@ -135,6 +137,7 @@ func NewTracker(namer common.MatchNamer, trackChildren, trackThreads, alwaysRech
 		trackThreads:  trackThreads,
 		alwaysRecheck: alwaysRecheck,
 		username:      make(map[int]string),
+		debug:         debug,
 	}
 }
 
@@ -208,6 +211,9 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 
 	metrics, softerrors, err := proc.GetMetrics()
 	if err != nil {
+		if t.debug {
+			log.Printf("error reading metrics for %+v: %v", procID, err)
+		}
 		// This usually happens due to the proc having exited, i.e.
 		// we lost the race.  We don't count that as an error.
 		if err != ErrProcNotExist {
@@ -227,9 +233,15 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 	} else {
 		static, err := proc.GetStatic()
 		if err != nil {
+			if t.debug {
+				log.Printf("error reading static details for %+v: %v", procID, err)
+			}
 			return nil, cerrs
 		}
 		newProc = &IDInfo{procID, static, metrics, threads}
+		if t.debug {
+			log.Printf("found new proc: %s", newProc)
+		}
 
 		// Is this a new process with the same pid as one we already know?
 		// Then delete it from the known map, otherwise the cleanup in Update()
@@ -291,6 +303,9 @@ func (t *Tracker) checkAncestry(idinfo IDInfo, newprocs map[ID]IDInfo) string {
 	ppid := idinfo.ParentPid
 	pProcID := t.procIds[ppid]
 	if pProcID.Pid < 1 {
+		if t.debug {
+			log.Printf("ignoring unmatched proc with no matched parent: %+v", idinfo)
+		}
 		// Reached root of process tree without finding a tracked parent.
 		t.ignore(idinfo.ID)
 		return ""
@@ -299,6 +314,10 @@ func (t *Tracker) checkAncestry(idinfo IDInfo, newprocs map[ID]IDInfo) string {
 	// Is the parent already known to the tracker?
 	if ptproc, ok := t.tracked[pProcID]; ok {
 		if ptproc != nil {
+			if t.debug {
+				log.Printf("matched as %q because child of %+v: %+v",
+					ptproc.groupName, pProcID, idinfo)
+			}
 			// We've found a tracked parent.
 			t.track(ptproc.groupName, idinfo)
 			return ptproc.groupName
@@ -311,6 +330,10 @@ func (t *Tracker) checkAncestry(idinfo IDInfo, newprocs map[ID]IDInfo) string {
 	// Is the parent another new process?
 	if pinfoid, ok := newprocs[pProcID]; ok {
 		if name := t.checkAncestry(pinfoid, newprocs); name != "" {
+			if t.debug {
+				log.Printf("matched as %q because child of %+v: %+v",
+					name, pProcID, idinfo)
+			}
 			// We've found a tracked parent, which implies this entire lineage should be tracked.
 			t.track(name, idinfo)
 			return name
@@ -318,6 +341,9 @@ func (t *Tracker) checkAncestry(idinfo IDInfo, newprocs map[ID]IDInfo) string {
 	}
 
 	// Parent is dead, i.e. we never saw it, or there's no tracked proc in our ancestry.
+	if t.debug {
+		log.Printf("ignoring unmatched proc with no matched parent: %+v", idinfo)
+	}
 	t.ignore(idinfo.ID)
 	return ""
 }
@@ -359,6 +385,9 @@ func (t *Tracker) Update(iter Iter) (CollectErrors, []Update, error) {
 		}
 		wanted, gname := t.namer.MatchAndName(nacl)
 		if wanted {
+			if t.debug {
+				log.Printf("matched as %q: %+v", gname, idinfo)
+			}
 			t.track(gname, idinfo)
 		} else {
 			untracked[idinfo.ID] = idinfo

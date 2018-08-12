@@ -216,6 +216,10 @@ type (
 	}
 )
 
+func (nmr *nameMapperRegex) String() string {
+	return fmt.Sprintf("%+v", nmr.mapping)
+}
+
 // Create a nameMapperRegex based on a string given as the -namemapper argument.
 func parseNameMapper(s string) (*nameMapperRegex, error) {
 	mapper := make(map[string]*prefixRegex)
@@ -290,6 +294,8 @@ func main() {
 			"path to YAML config file")
 		recheck = flag.Bool("recheck", false,
 			"recheck process names on each scrape")
+		debug = flag.Bool("debug", false,
+			"log debugging information to stdout")
 	)
 	flag.Parse()
 
@@ -305,12 +311,15 @@ func main() {
 			log.Fatalf("-config.path cannot be used with -namemapping or -procnames")
 		}
 
-		cfg, err := config.ReadFile(*configPath)
+		cfg, err := config.ReadFile(*configPath, *debug)
 		if err != nil {
 			log.Fatalf("error reading config file %q: %v", *configPath, err)
 		}
 		log.Printf("Reading metrics from %s based on %q", *procfsPath, *configPath)
 		matchnamer = cfg.MatchNamers
+		if *debug {
+			log.Printf("using config matchnamer: %v", cfg.MatchNamers)
+		}
 	} else {
 		namemapper, err := parseNameMapper(*nameMapping)
 		if err != nil {
@@ -328,10 +337,13 @@ func main() {
 		}
 
 		log.Printf("Reading metrics from %s for procnames: %v", *procfsPath, names)
+		if *debug {
+			log.Printf("using cmdline matchnamer: %v", namemapper)
+		}
 		matchnamer = namemapper
 	}
 
-	pc, err := NewProcessCollector(*procfsPath, *children, *threads, matchnamer, *recheck)
+	pc, err := NewProcessCollector(*procfsPath, *children, *threads, matchnamer, *recheck, *debug)
 	if err != nil {
 		log.Fatalf("Error initializing: %v", err)
 	}
@@ -378,6 +390,7 @@ type (
 		scrapeErrors         int
 		scrapeProcReadErrors int
 		scrapePartialErrors  int
+		debug                bool
 	}
 )
 
@@ -387,20 +400,25 @@ func NewProcessCollector(
 	threads bool,
 	n common.MatchNamer,
 	recheck bool,
+	debug bool,
 ) (*NamedProcessCollector, error) {
-	fs, err := proc.NewFS(procfsPath)
+	fs, err := proc.NewFS(procfsPath, debug)
 	if err != nil {
 		return nil, err
 	}
 	p := &NamedProcessCollector{
 		scrapeChan: make(chan scrapeRequest),
-		Grouper:    proc.NewGrouper(n, children, threads, recheck),
+		Grouper:    proc.NewGrouper(n, children, threads, recheck, debug),
 		source:     fs,
 		threads:    threads,
+		debug:      debug,
 	}
 
 	colErrs, _, err := p.Update(p.source.AllProcs())
 	if err != nil {
+		if debug {
+			log.Print(err)
+		}
 		return nil, err
 	}
 	p.scrapePartialErrors += colErrs.Partial

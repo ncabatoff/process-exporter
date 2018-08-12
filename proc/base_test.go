@@ -1,6 +1,7 @@
 package proc
 
 import (
+	"fmt"
 	"time"
 
 	common "github.com/ncabatoff/process-exporter"
@@ -45,6 +46,14 @@ func newNamer(names ...string) namer {
 		nr[name] = struct{}{}
 	}
 	return nr
+}
+
+func (n namer) String() string {
+	var ss = make([]string, 0, len(n))
+	for s := range n {
+		ss = append(ss, s)
+	}
+	return fmt.Sprintf("%v", ss)
 }
 
 func (n namer) MatchAndName(nacl common.ProcAttributes) (bool, string) {

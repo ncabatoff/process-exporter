@@ -350,3 +350,12 @@ minimal: each time a scrape occurs, it will parse of /proc/$pid/stat and
 ## Dashboards
 
 An example Grafana dashboard to view the metrics is available at https://grafana.net/dashboards/249
+
+## Building
+
+Install [dep](https://github.com/golang/dep), then:
+
+```
+dep ensure
+make
+```

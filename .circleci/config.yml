@@ -1,24 +1,16 @@
 version: 2
 jobs:
   build:
-    machine: true
+    docker:
+      - image: circleci/golang:1.10
+    working_directory: /go/src/github.com/ncabatoff/process-exporter
     environment:
       DEP_VERSION: "0.5.0"
-      GOPATH: /tmp/go
     steps:
-      - checkout:
-          path: /tmp/go/src/github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME
-      - run:
-          command: sudo apt-get -qq update
-      - run:
-          command: sudo apt-get install -y rpm
-      - run:
-          command: curl -L -s https://github.com/golang/dep/releases/download/v${DEP_VERSION}/dep-linux-amd64 -o $HOME/dep
-      - run:
-          command: chmod +x $HOME/dep
-      - run:
-          command: cd /tmp/go/src/github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME && $HOME/dep ensure
-      - run:
-          command: /tmp/go/src/github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/download-prereqs.sh
-      - run:
-          command: make style vet test build integ docker
+      - checkout
+      - run: curl -L -s -o dep https://github.com/golang/dep/releases/download/v${DEP_VERSION}/dep-linux-amd64
+      - run: chmod +x dep
+      - run: ./dep ensure -vendor-only
+      - run: sudo apt-get -qq update
+      - run: sudo apt-get install -y rpm
+      - run: make style vet test build integ docker

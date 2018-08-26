@@ -18,8 +18,7 @@ steps:
     args: 
       - build
       - --file=Dockerfile
-      - --tag=gcr.io/$PROJECT_ID/process-exporter:$TAG_NAME
-      - --tag=ncabatoff/process-exporter:$TAG_NAME
+      - --tag=ncabatoff/process-exporter:`echo $TAG_NAME|sed s/^v//`
       - .
 
   # Login to docker hub

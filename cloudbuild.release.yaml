@@ -37,7 +37,7 @@ steps:
     entrypoint: /bin/sh
     dir: gopath/src/github.com
     env: ['GOPATH=/workspace/gopath']
-    args: ['-c', 'cd ncabatoff/process-exporter && git status && git tag && /goreleaser' ]
+    args: ['-c', 'cd ncabatoff/process-exporter && git tag $TAG_NAME && /goreleaser' ]
     secretEnv: ['GITHUB_TOKEN']
 
 secrets:

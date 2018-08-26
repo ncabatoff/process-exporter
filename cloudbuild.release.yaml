@@ -29,8 +29,8 @@ steps:
     secretEnv: ['DOCKER_PASSWORD']
 
   # Push to docker hub
-# - name: gcr.io/cloud-builders/docker
-#   args: ['push', 'ncabatoff/process-exporter:$TAG_NAME']
+  - name: gcr.io/cloud-builders/docker
+    args: ['push', 'ncabatoff/process-exporter:$TAG_NAME']
 
   # Create github release
   - name: goreleaser/goreleaser

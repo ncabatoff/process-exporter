@@ -32,6 +32,10 @@ integ:
 	@echo ">> smoke testing process-exporter"
 	./process-exporter $(INTEG_TEST)
 
+install:
+	@echo ">> installing binary"
+	cd cmd/process-exporter; CGO_ENABLED=0 go install -a -tags netgo
+
 docker:
 	@echo ">> building docker image"
 	docker build -t "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" .

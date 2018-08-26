@@ -15,11 +15,8 @@ steps:
 
   # Build project
   - name: gcr.io/cloud-builders/docker
-    args: 
-      - build
-      - --file=Dockerfile
-      - --tag=ncabatoff/process-exporter:`echo $TAG_NAME|sed s/^v//`
-      - .
+    entrypoint: 'bash'
+    args: ['-c', 'docker build -t ncabatoff/process-exporter:`echo $TAG_NAME|sed s/^v//` .']
 
   # Login to docker hub
   - name: gcr.io/cloud-builders/docker

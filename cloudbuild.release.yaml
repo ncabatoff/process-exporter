@@ -30,7 +30,8 @@ steps:
 
   # Push to docker hub
   - name: gcr.io/cloud-builders/docker
-    args: ['push', 'ncabatoff/process-exporter:$TAG_NAME']
+    entrypoint: 'bash'
+    args: ['-c', 'docker push ncabatoff/process-exporter:`echo $TAG_NAME|sed s/^v//`']
 
   # Create github release
   - name: goreleaser/goreleaser

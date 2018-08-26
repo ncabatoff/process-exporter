@@ -16,7 +16,7 @@ steps:
   - name: gcr.io/cloud-builders/docker
     args: 
       - build
-      - --file=Dockerfile.cloudbuild
+      - --file=Dockerfile
       - --tag=gcr.io/$PROJECT_ID/process-exporter:$TAG_NAME
       - --tag=ncabatoff/process-exporter:$TAG_NAME
       - .
@@ -33,7 +33,7 @@ steps:
 #   args: ['-c', 'cd ncabatoff/process-exporter && /goreleaser' ]
 
 secrets:
-  - kmsKeyName: projects/$PROJECT_ID/locations/global/keyRings/cloudbuild/cryptoKeys/mykey
+  - kmsKeyName: projects/process-exporter/locations/global/keyRings/cloudbuild/cryptoKeys/mykey
     secretEnv:
       DOCKER_PASSWORD: |
         CiQAeHUuEinm1h2j9mp8r0NjPw1l1bBwzDG+JHPUPf3GvtmdjXESMAD3wUauaxWrxid/zPunG67x

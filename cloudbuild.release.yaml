@@ -13,6 +13,7 @@ steps:
     env: ['PROJECT_ROOT=github.com/ncabatoff/process-exporter']
     args: ['env']
 
+  # Build project
   - name: gcr.io/cloud-builders/docker
     args: 
       - build
@@ -21,16 +22,23 @@ steps:
       - --tag=ncabatoff/process-exporter:$TAG_NAME
       - .
 
+  # Login to docker hub
   - name: gcr.io/cloud-builders/docker
     entrypoint: 'bash'
     args: ['-c', 'docker login --username=ncabatoff --password=$$DOCKER_PASSWORD']
     secretEnv: ['DOCKER_PASSWORD']
 
-# - name: goreleaser/goreleaser
-#   entrypoint: /bin/sh
-#   dir: gopath/src/github.com
-#   env: ['GOPATH=/workspace/gopath']
-#   args: ['-c', 'cd ncabatoff/process-exporter && /goreleaser' ]
+  # Push to docker hub
+# - name: gcr.io/cloud-builders/docker
+#   args: ['push', 'ncabatoff/process-exporter:$TAG_NAME']
+
+  # Create github release
+  - name: goreleaser/goreleaser
+    entrypoint: /bin/sh
+    dir: gopath/src/github.com
+    env: ['GOPATH=/workspace/gopath']
+    args: ['-c', 'cd ncabatoff/process-exporter && /goreleaser' ]
+    secretEnv: ['GITHUB_TOKEN']
 
 secrets:
   - kmsKeyName: projects/process-exporter/locations/global/keyRings/cloudbuild/cryptoKeys/mykey
@@ -38,3 +46,7 @@ secrets:
       DOCKER_PASSWORD: |
         CiQAeHUuEinm1h2j9mp8r0NjPw1l1bBwzDG+JHPUPf3GvtmdjXESMAD3wUauaxWrxid/zPunG67x
         5+1CYedV5exh0XwQ32eu4UkniS7HHJNWBudklaG0JA==
+      GITHUB_TOKEN: |
+        CiQAeHUuEhEKAvfIHlUZrCgHNScm0mDKI8Z1w/N3OzDk8Ql6kAUSUQD3wUau7qRc+H7OnTUo6b2Z
+        DKA1eMKHNg729KfHj2ZMqZXinrJloYMbZcZRXP9xv91xCq6QJB5UoFoyYDnXGdvgXC08YUstR6UB
+        H0bwHhe1GQ==

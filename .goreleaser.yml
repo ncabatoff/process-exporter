@@ -33,4 +33,4 @@ nfpm:
     preremove: "packaging/scripts/preremove.sh"
 release:
   draft: false
-  prerelease: false
+  prerelease: true

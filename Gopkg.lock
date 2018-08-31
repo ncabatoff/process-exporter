@@ -73,7 +73,7 @@
 
 [[projects]]
   branch = "add-proc-status"
-  digest = "1:f527729af40222d0203c7bf1461315910e1d443205f5218371cd03fba4675d37"
+  digest = "1:4a80fc367185fc968e90e6922d0e031c13944228b3039b594e6bb02b0ccae47c"
   name = "github.com/ncabatoff/procfs"
   packages = [
     ".",
@@ -82,7 +82,7 @@
     "xfs",
   ]
   pruneopts = "UT"
-  revision = "67d51d2e658f6a3aab275103e022624db32c4638"
+  revision = "677ef9f79e8d259ae597874f1d3a74fc1c8d9c5e"
 
 [[projects]]
   digest = "1:b6221ec0f8903b556e127c449e7106b63e6867170c2d10a7c058623d086f2081"

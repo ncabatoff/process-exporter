@@ -157,8 +157,14 @@ func (b *procStatusBuilder) readStatus(r io.Reader) (ProcStatus, error) {
 		if crpos == -1 {
 			return ProcStatus{}, fmt.Errorf("line %d from status file without newline: %s", lineno, s)
 		}
-		line := s[:crpos]
+		line := strings.TrimSpace(s[:crpos])
 		s = s[crpos+1:]
+		if line == "" {
+			if s == "" {
+				break
+			}
+			continue
+		}
 
 		pos := strings.IndexByte(line, ':')
 		if pos == -1 {

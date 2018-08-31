@@ -1,4 +1,4 @@
-# Archive created by ttar -C . -c -f fixtures.ttar fixtures/
+# Archive created by ttar -c -f fixtures.ttar fixtures/
 Directory: fixtures
 Mode: 755
 # ttar - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -117,7 +117,7 @@ Lines: 1
 Mode: 644
 # ttar - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 Path: fixtures/26231/status
-Lines: 49
+Lines: 50
 Name:	gvim
 State:	S (sleeping)
 Tgid:	26231
@@ -167,6 +167,7 @@ Mems_allowed:	00000000,00000001
 Mems_allowed_list:	0
 voluntary_ctxt_switches:	6340
 nonvoluntary_ctxt_switches:	361
+
 Mode: 444
 # ttar - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 Directory: fixtures/26232

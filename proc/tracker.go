@@ -221,12 +221,22 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 		}
 		return nil, cerrs
 	}
-	cerrs.Partial += softerrors
 
 	var threads []Thread
-	if t.trackThreads {
-		threads, _ = proc.GetThreads()
+	threads, err = proc.GetThreads()
+	if err != nil {
+		softerrors |= 1
 	}
+	cerrs.Partial += softerrors
+
+	if len(threads) > 0 {
+		metrics.Counts.CtxSwitchNonvoluntary, metrics.Counts.CtxSwitchVoluntary = 0, 0
+		for _, thread := range threads {
+			metrics.Counts.CtxSwitchNonvoluntary += thread.Counts.CtxSwitchNonvoluntary
+			metrics.Counts.CtxSwitchVoluntary += thread.Counts.CtxSwitchVoluntary
+		}
+	}
+
 	var newProc *IDInfo
 	if known {
 		last.update(metrics, updateTime, &cerrs, threads)

@@ -221,6 +221,7 @@ func TestIterator(t *testing.T) {
 	}
 }
 
+// Fail, to test checks API
 func TestFail(t *testing.T) {
 	t.Fail()
 }

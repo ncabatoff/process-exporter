@@ -168,6 +168,12 @@ var (
 		nil,
 		nil)
 
+	threadWchanDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_threads_wchan",
+		"Number of threads in this group waiting on each wchan",
+		[]string{"groupname", "wchan"},
+		nil)
+
 	threadCountDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_thread_count",
 		"Number of threads in this group with same threadname",
@@ -448,6 +454,7 @@ func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- scrapeErrorsDesc
 	ch <- scrapeProcReadErrorsDesc
 	ch <- scrapePartialErrorsDesc
+	ch <- threadWchanDesc
 	ch <- threadCountDesc
 	ch <- threadCpuSecsDesc
 	ch <- threadIoBytesDesc
@@ -521,6 +528,12 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 				prometheus.GaugeValue, float64(gcounts.States.Zombie), gname, "Zombie")
 			ch <- prometheus.MustNewConstMetric(statesDesc,
 				prometheus.GaugeValue, float64(gcounts.States.Other), gname, "Other")
+
+			for wchan, count := range gcounts.Wchans {
+				ch <- prometheus.MustNewConstMetric(threadWchanDesc,
+					prometheus.GaugeValue, float64(count), gname, wchan)
+			}
+
 			if p.threads {
 				for _, thr := range gcounts.Threads {
 					ch <- prometheus.MustNewConstMetric(threadCountDesc,

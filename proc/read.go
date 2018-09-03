@@ -77,6 +77,7 @@ type (
 		Filedesc
 		NumThreads uint64
 		States
+		Wchan string
 	}
 
 	// Thread contains the name and counts for a thread.
@@ -84,6 +85,7 @@ type (
 		ThreadID
 		ThreadName string
 		Counts
+		Wchan string
 	}
 
 	// IDInfo groups all info for a single process.
@@ -116,6 +118,7 @@ type (
 		// and 0 on complete success, 1 if some (like I/O) couldn't be read.
 		GetMetrics() (Metrics, int, error)
 		GetStates() (States, error)
+		GetWchan() (string, error)
 		GetCounts() (Counts, int, error)
 		GetThreads() ([]Thread, error)
 	}
@@ -130,6 +133,7 @@ type (
 		cmdline []string
 		io      *procfs.ProcIO
 		fs      *FS
+		wchan   *string
 	}
 
 	proc struct {
@@ -258,6 +262,10 @@ func (p IDInfo) GetStates() (States, error) {
 	return p.States, nil
 }
 
+func (p IDInfo) GetWchan() (string, error) {
+	return p.Wchan, nil
+}
+
 func (p *proccache) GetPid() int {
 	return p.Proc.PID
 }
@@ -308,6 +316,17 @@ func (p *proccache) getCmdLine() ([]string, error) {
 		p.cmdline = cmdline
 	}
 	return p.cmdline, nil
+}
+
+func (p *proccache) getWchan() (string, error) {
+	if p.wchan == nil {
+		wchan, err := p.Proc.Wchan()
+		if err != nil {
+			return "", err
+		}
+		p.wchan = &wchan
+	}
+	return *p.wchan, nil
 }
 
 func (p *proccache) getIo() (procfs.ProcIO, error) {
@@ -386,6 +405,10 @@ func (p proc) GetCounts() (Counts, int, error) {
 	}, softerrors, nil
 }
 
+func (p proc) GetWchan() (string, error) {
+	return p.getWchan()
+}
+
 func (p proc) GetStates() (States, error) {
 	stat, err := p.getStat()
 	if err != nil {
@@ -441,6 +464,11 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 		return Metrics{}, 0, err
 	}
 
+	wchan, err := p.getWchan()
+	if err != nil {
+		softerrors |= 1
+	}
+
 	return Metrics{
 		Counts: counts,
 		Memory: Memory{
@@ -454,6 +482,7 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 		},
 		NumThreads: uint64(stat.NumThreads),
 		States:     states,
+		Wchan:      wchan,
 	}, softerrors, nil
 }
 
@@ -484,10 +513,13 @@ func (p proc) GetThreads() ([]Thread, error) {
 			continue
 		}
 
+		wchan, _ := iter.GetWchan()
+
 		threads = append(threads, Thread{
 			ThreadID:   ThreadID(id),
 			ThreadName: static.Name,
 			Counts:     counts,
+			Wchan:      wchan,
 		})
 	}
 	err = iter.Close()

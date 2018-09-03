@@ -43,6 +43,7 @@ type (
 		accum      Counts
 		latest     Delta
 		lastUpdate time.Time
+		wchan      string
 	}
 
 	// trackedProc accumulates metrics for a process, as well as
@@ -84,6 +85,8 @@ type (
 		NumThreads uint64
 		// States is how many processes are in which run state.
 		States
+		// Wchans is how many threads are in each non-zero wchan.
+		Wchans map[string]int
 		// Threads are the thread updates for this process, if the Tracker
 		// has trackThreads==true.
 		Threads []ThreadUpdate
@@ -118,10 +121,17 @@ func (tp *trackedProc) getUpdate() Update {
 		Start:      tp.static.StartTime,
 		NumThreads: tp.metrics.NumThreads,
 		States:     tp.metrics.States,
+		Wchans:     make(map[string]int),
+	}
+	if tp.metrics.Wchan != "" {
+		u.Wchans[tp.metrics.Wchan] = 1
 	}
 	if len(tp.threads) > 1 {
 		for _, tt := range tp.threads {
 			u.Threads = append(u.Threads, ThreadUpdate{tt.name, tt.latest})
+			if tt.wchan != "" {
+				u.Wchans[tt.wchan]++
+			}
 		}
 	}
 	return u
@@ -151,7 +161,7 @@ func (t *Tracker) track(groupName string, idinfo IDInfo) {
 		tproc.threads = make(map[ThreadID]trackedThread)
 		for _, thr := range idinfo.Threads {
 			tproc.threads[thr.ThreadID] = trackedThread{
-				thr.ThreadName, thr.Counts, Delta{}, time.Time{}}
+				thr.ThreadName, thr.Counts, Delta{}, time.Time{}, thr.Wchan}
 		}
 	}
 	t.tracked[idinfo.ID] = &tproc
@@ -175,7 +185,7 @@ func (tp *trackedProc) update(metrics Metrics, now time.Time, cerrs *CollectErro
 			tp.threads = make(map[ThreadID]trackedThread)
 		}
 		for _, thr := range threads {
-			tt := trackedThread{thr.ThreadName, thr.Counts, Delta{}, now}
+			tt := trackedThread{thr.ThreadName, thr.Counts, Delta{}, now, thr.Wchan}
 			if old, ok := tp.threads[thr.ThreadID]; ok {
 				tt.latest, tt.accum = thr.Counts.Sub(old.accum), thr.Counts
 			}

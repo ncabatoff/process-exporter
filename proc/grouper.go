@@ -33,7 +33,8 @@ type (
 	Group struct {
 		Counts
 		States
-		Procs int
+		Wchans map[string]int
+		Procs  int
 		Memory
 		OldestStartTime time.Time
 		OpenFDs         uint64
@@ -77,6 +78,13 @@ func groupadd(grp Group, ts Update) Group {
 	grp.States.Add(ts.States)
 	if grp.OldestStartTime == zeroTime || ts.Start.Before(grp.OldestStartTime) {
 		grp.OldestStartTime = ts.Start
+	}
+
+	if grp.Wchans == nil {
+		grp.Wchans = make(map[string]int)
+	}
+	for wchan, count := range ts.Wchans {
+		grp.Wchans[wchan] += count
 	}
 
 	return grp

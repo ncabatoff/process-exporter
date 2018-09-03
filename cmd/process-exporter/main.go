@@ -8,6 +8,7 @@ import (
 	_ "net/http/pprof"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/ncabatoff/fakescraper"
 	common "github.com/ncabatoff/process-exporter"
@@ -282,8 +283,8 @@ func main() {
 			"Address on which to expose metrics and web interface.")
 		metricsPath = flag.String("web.telemetry-path", "/metrics",
 			"Path under which to expose metrics.")
-		onceToStdout = flag.Bool("once-to-stdout", false,
-			"Don't bind, instead just print the metrics once to stdout and exit")
+		onceToStdoutDelay = flag.Duration("once-to-stdout-delay", 0,
+			"Don't bind, just wait this much time, print the metrics once to stdout, and exit")
 		procNames = flag.String("procnames", "",
 			"comma-seperated list of process names to monitor")
 		procfsPath = flag.String("procfs", "/proc",
@@ -354,12 +355,13 @@ func main() {
 
 	prometheus.MustRegister(pc)
 
-	if *onceToStdout {
+	if *onceToStdoutDelay != 0 {
 		// We throw away the first result because that first collection primes the pump, and
 		// otherwise we won't see our counter metrics.  This is specific to the implementation
 		// of NamedProcessCollector.Collect().
 		fscraper := fakescraper.NewFakeScraper()
 		fscraper.Scrape()
+		time.Sleep(*onceToStdoutDelay)
 		fmt.Print(fscraper.Scrape())
 		return
 	}

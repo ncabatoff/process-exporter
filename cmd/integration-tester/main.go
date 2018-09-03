@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -39,9 +40,10 @@ func main() {
 		time.Sleep(time.Second)
 	}
 
+	success := false
 	for i := 0; i < *flagAttempts; i++ {
 		comm := filepath.Base(*flagLoadGenerator)
-		cmdpe := exec.CommandContext(ctx, *flagProcessExporter, "-once-to-stdout",
+		cmdpe := exec.CommandContext(ctx, *flagProcessExporter, "-once-to-stdout-delay", "10s",
 			"-procnames", comm)
 		out, err := cmdpe.Output()
 		if err != nil {
@@ -50,12 +52,18 @@ func main() {
 
 		results := getResults(comm, string(out))
 		if verify(results) {
+			success = true
 			break
 		}
+		log.Printf("try %d/%d failed", i+1, *flagAttempts)
 	}
 
 	cancel()
 	cmdlg.Wait()
+
+	if !success {
+		os.Exit(1)
+	}
 }
 
 type result struct {

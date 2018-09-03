@@ -168,10 +168,8 @@ func verify(results map[string][]result) bool {
 			switch tname := result.labels["threadname"]; tname {
 			case "userbusy":
 				assertGreaterOrEqual("thread_cpu_seconds_total user "+tname, result.value, 0.00001)
-			case "blocking", "sysbusy":
-				assertGreaterOrEqual("thread_cpu_seconds_total user "+tname, result.value, 0)
 			default:
-				assertExact("thread_cpu_seconds_total user "+tname, result.value, 0)
+				assertGreaterOrEqual("thread_cpu_seconds_total user "+tname, result.value, 0)
 			}
 		}
 	}

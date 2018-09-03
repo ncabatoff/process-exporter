@@ -99,7 +99,7 @@ func diskio(sync bool, writesize int) {
 	}
 	defer f.Close()
 
-	ready <- struct{}{}
+	sentready := false
 
 	for {
 		_, err = f.WriteAt(b, 0)
@@ -117,6 +117,10 @@ func diskio(sync bool, writesize int) {
 		_, err = f.ReadAt(b, 0)
 		if err != nil {
 			panic("unable to read tempfile: " + err.Error())
+		}
+		if !sentready {
+			ready <- struct{}{}
+			sentready = true
 		}
 	}
 }

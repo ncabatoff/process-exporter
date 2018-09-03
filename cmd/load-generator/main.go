@@ -14,10 +14,11 @@ var ready = make(chan struct{})
 
 func init() {
 	var (
-		flagWaiting  = flag.Int("waiting", 1, "minimum number of waiting threads")
-		flagUserBusy = flag.Int("userbusy", 1, "minimum number of userbusy threads")
-		flagSysBusy  = flag.Int("sysbusy", 1, "minimum number of sysbusy threads")
-		flagBlocking = flag.Int("blocking", 1, "minimum number of io blocking threads")
+		flagWaiting        = flag.Int("waiting", 1, "minimum number of waiting threads")
+		flagUserBusy       = flag.Int("userbusy", 1, "minimum number of userbusy threads")
+		flagSysBusy        = flag.Int("sysbusy", 1, "minimum number of sysbusy threads")
+		flagBlocking       = flag.Int("blocking", 1, "minimum number of io blocking threads")
+		flagWriteSizeBytes = flag.Int("write-size-bytes", 1024*1024, "how many bytes to write each cycle")
 	)
 	flag.Parse()
 	runtime.LockOSThread()
@@ -30,11 +31,11 @@ func init() {
 		<-ready
 	}
 	for i := 0; i < *flagSysBusy; i++ {
-		go diskio(false)
+		go diskio(false, *flagWriteSizeBytes)
 		<-ready
 	}
 	for i := 0; i < *flagBlocking; i++ {
-		go diskio(true)
+		go diskio(true, *flagWriteSizeBytes)
 		<-ready
 	}
 }
@@ -76,7 +77,7 @@ func userbusy() {
 	}
 }
 
-func diskio(sync bool) {
+func diskio(sync bool, writesize int) {
 	runtime.LockOSThread()
 	if sync {
 		setPrName("blocking")
@@ -86,7 +87,7 @@ func diskio(sync bool) {
 
 	// Use random data because if we're on a filesystem that does compression like ZFS,
 	// using zeroes is almost a no-op.
-	b := make([]byte, 1024*1024)
+	b := make([]byte, writesize)
 	_, err := rand.Read(b)
 	if err != nil {
 		panic("unable to get rands: " + err.Error())

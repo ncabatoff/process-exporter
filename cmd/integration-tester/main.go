@@ -9,6 +9,7 @@ import (
 	"log"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -21,12 +22,13 @@ func main() {
 		flagProcessExporter = flag.String("process-exporter", "./process-exporter", "path to process-exporter")
 		flagLoadGenerator   = flag.String("load-generator", "./load-generator", "path to load-generator")
 		flagAttempts        = flag.Int("attempts", 3, "try this many times before returning failure")
+		flagWriteSizeBytes  = flag.Int("write-size-bytes", 1024*1024, "how many bytes to write each cycle")
 	)
 	flag.Parse()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cmdlg := exec.CommandContext(ctx, *flagLoadGenerator)
+	cmdlg := exec.CommandContext(ctx, *flagLoadGenerator, "-write-size-bytes", strconv.Itoa(*flagWriteSizeBytes))
 	var buf = &bytes.Buffer{}
 	cmdlg.Stdout = buf
 	err := cmdlg.Start()

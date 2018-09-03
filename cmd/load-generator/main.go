@@ -101,8 +101,9 @@ func diskio(sync bool, writesize int) {
 
 	sentready := false
 
+	offset := int64(0)
 	for {
-		_, err = f.WriteAt(b, 0)
+		_, err = f.WriteAt(b, offset)
 		if err != nil {
 			panic("unable to write tempfile: " + err.Error())
 		}
@@ -122,5 +123,6 @@ func diskio(sync bool, writesize int) {
 			ready <- struct{}{}
 			sentready = true
 		}
+		offset++
 	}
 }

@@ -49,6 +49,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Error launching process-exporter %q: %v", *flagProcessExporter, err)
 		}
+		log.Println(string(out))
 
 		results := getResults(comm, string(out))
 		if verify(results) {
@@ -158,12 +159,10 @@ func verify(results map[string][]result) bool {
 	for _, result := range results["thread_cpu_seconds_total"] {
 		if result.labels["cpumode"] == "system" {
 			switch tname := result.labels["threadname"]; tname {
-			case "sysbusy":
+			case "sysbusy", "blocking":
 				assertGreaterOrEqual("thread_cpu_seconds_total system "+tname, result.value, 0.00001)
-			case "blocking":
-				assertGreaterOrEqual("thread_cpu_seconds_total system "+tname, result.value, 0)
 			default:
-				assertExact("thread_cpu_seconds_total system "+tname, result.value, 0)
+				assertGreaterOrEqual("thread_cpu_seconds_total system "+tname, result.value, 0)
 			}
 		} else if result.labels["cpumode"] == "user" {
 			switch tname := result.labels["threadname"]; tname {

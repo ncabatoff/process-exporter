@@ -36,7 +36,7 @@ integ:
 	@echo ">> integration testing process-exporter"
 	go build -o integration-tester cmd/integration-tester/main.go
 	go build -o load-generator cmd/load-generator/main.go
-	./integration-tester -write-size-bytes 1024
+	./integration-tester -write-size-bytes 65536
 
 install:
 	@echo ">> installing binary"

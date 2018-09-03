@@ -244,6 +244,7 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 		for _, thread := range threads {
 			metrics.Counts.CtxSwitchNonvoluntary += thread.Counts.CtxSwitchNonvoluntary
 			metrics.Counts.CtxSwitchVoluntary += thread.Counts.CtxSwitchVoluntary
+			metrics.States.Add(thread.States)
 		}
 	}
 

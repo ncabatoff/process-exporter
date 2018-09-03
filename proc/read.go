@@ -62,6 +62,7 @@ type (
 		Limit uint64
 	}
 
+	// States counts how many threads are in each state.
 	States struct {
 		Running  int
 		Sleeping int
@@ -80,12 +81,13 @@ type (
 		Wchan string
 	}
 
-	// Thread contains the name and counts for a thread.
+	// Thread contains per-thread data.
 	Thread struct {
 		ThreadID
 		ThreadName string
 		Counts
 		Wchan string
+		States
 	}
 
 	// IDInfo groups all info for a single process.
@@ -514,12 +516,14 @@ func (p proc) GetThreads() ([]Thread, error) {
 		}
 
 		wchan, _ := iter.GetWchan()
+		states, _ := iter.GetStates()
 
 		threads = append(threads, Thread{
 			ThreadID:   ThreadID(id),
 			ThreadName: static.Name,
 			Counts:     counts,
 			Wchan:      wchan,
+			States:     states,
 		})
 	}
 	err = iter.Close()

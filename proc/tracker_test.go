@@ -22,17 +22,17 @@ func TestTrackerBasic(t *testing.T) {
 	}{
 		{
 			[]IDInfo{newProcStart(p1, n1, 1), newProcStart(p3, n3, 1)},
-			[]Update{{GroupName: n1, Start: t1}},
+			[]Update{{GroupName: n1, Start: t1, Wchans: msi{}}},
 		},
 		{
 			// p3 (ignored) has exited and p2 has appeared
 			[]IDInfo{newProcStart(p1, n1, 1), newProcStart(p2, n2, 2)},
-			[]Update{{GroupName: n1, Start: t1}, {GroupName: n2, Start: t2}},
+			[]Update{{GroupName: n1, Start: t1, Wchans: msi{}}, {GroupName: n2, Start: t2, Wchans: msi{}}},
 		},
 		{
 			// p1 has exited and a new proc with a new name has taken its pid
 			[]IDInfo{newProcStart(p1, n4, 3), newProcStart(p2, n2, 2)},
-			[]Update{{GroupName: n4, Start: t3}, {GroupName: n2, Start: t2}},
+			[]Update{{GroupName: n4, Start: t3, Wchans: msi{}}, {GroupName: n2, Start: t2, Wchans: msi{}}},
 		},
 	}
 	// Note that n3 should not be tracked according to our namer.
@@ -66,7 +66,7 @@ func TestTrackerChildren(t *testing.T) {
 				newProcParent(p1, n1, 0),
 				newProcParent(p2, n2, p1),
 			},
-			[]Update{{GroupName: n2, Start: t1}},
+			[]Update{{GroupName: n2, Start: t1, Wchans: msi{}}},
 		},
 		{
 			[]IDInfo{
@@ -74,7 +74,7 @@ func TestTrackerChildren(t *testing.T) {
 				newProcParent(p2, n2, p1),
 				newProcParent(p3, n3, p2),
 			},
-			[]Update{{GroupName: n2, Start: t1}, {GroupName: n2, Start: t1}},
+			[]Update{{GroupName: n2, Start: t1, Wchans: msi{}}, {GroupName: n2, Start: t1, Wchans: msi{}}},
 		},
 	}
 	// Only n2 and children of n2s should be tracked
@@ -102,13 +102,13 @@ func TestTrackerMetrics(t *testing.T) {
 			piinfost(p, n, Counts{1, 2, 3, 4, 5, 6, 0, 0}, Memory{7, 8, 0},
 				Filedesc{1, 10}, 9, States{Sleeping: 1}),
 			Update{n, Delta{}, Memory{7, 8, 0}, Filedesc{1, 10}, tm,
-				9, States{Sleeping: 1}, nil},
+				9, States{Sleeping: 1}, msi{}, nil},
 		},
 		{
 			piinfost(p, n, Counts{2, 3, 4, 5, 6, 7, 0, 0}, Memory{1, 2, 0},
 				Filedesc{2, 20}, 1, States{Running: 1}),
 			Update{n, Delta{1, 1, 1, 1, 1, 1, 0, 0}, Memory{1, 2, 0},
-				Filedesc{2, 20}, tm, 1, States{Running: 1}, nil},
+				Filedesc{2, 20}, tm, 1, States{Running: 1}, msi{}, nil},
 		},
 	}
 	tr := NewTracker(newNamer(n), false, false, false, false)
@@ -131,13 +131,13 @@ func TestTrackerThreads(t *testing.T) {
 	}{
 		{
 			piinfo(p, n, Counts{}, Memory{}, Filedesc{1, 1}, 1),
-			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 1, States{}, nil},
+			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 1, States{}, msi{}, nil},
 		}, {
 			piinfot(p, n, Counts{}, Memory{}, Filedesc{1, 1}, []Thread{
-				{ThreadID(ID{p, 0}), "t1", Counts{1, 2, 3, 4, 5, 6, 0, 0}},
-				{ThreadID(ID{p + 1, 0}), "t2", Counts{1, 1, 1, 1, 1, 1, 0, 0}},
+				{ThreadID(ID{p, 0}), "t1", Counts{1, 2, 3, 4, 5, 6, 0, 0}, "", States{}},
+				{ThreadID(ID{p + 1, 0}), "t2", Counts{1, 1, 1, 1, 1, 1, 0, 0}, "", States{}},
 			}),
-			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{},
+			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{}, msi{},
 				[]ThreadUpdate{
 					{"t1", Delta{}},
 					{"t2", Delta{}},
@@ -145,11 +145,11 @@ func TestTrackerThreads(t *testing.T) {
 			},
 		}, {
 			piinfot(p, n, Counts{}, Memory{}, Filedesc{1, 1}, []Thread{
-				{ThreadID(ID{p, 0}), "t1", Counts{2, 3, 4, 5, 6, 7, 0, 0}},
-				{ThreadID(ID{p + 1, 0}), "t2", Counts{2, 2, 2, 2, 2, 2, 0, 0}},
-				{ThreadID(ID{p + 2, 0}), "t2", Counts{1, 1, 1, 1, 1, 1, 0, 0}},
+				{ThreadID(ID{p, 0}), "t1", Counts{2, 3, 4, 5, 6, 7, 0, 0}, "", States{}},
+				{ThreadID(ID{p + 1, 0}), "t2", Counts{2, 2, 2, 2, 2, 2, 0, 0}, "", States{}},
+				{ThreadID(ID{p + 2, 0}), "t2", Counts{1, 1, 1, 1, 1, 1, 0, 0}, "", States{}},
 			}),
-			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 3, States{},
+			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 3, States{}, msi{},
 				[]ThreadUpdate{
 					{"t1", Delta{1, 1, 1, 1, 1, 1, 0, 0}},
 					{"t2", Delta{1, 1, 1, 1, 1, 1, 0, 0}},
@@ -158,10 +158,10 @@ func TestTrackerThreads(t *testing.T) {
 			},
 		}, {
 			piinfot(p, n, Counts{}, Memory{}, Filedesc{1, 1}, []Thread{
-				{ThreadID(ID{p, 0}), "t1", Counts{2, 3, 4, 5, 6, 7, 0, 0}},
-				{ThreadID(ID{p + 2, 0}), "t2", Counts{1, 2, 3, 4, 5, 6, 0, 0}},
+				{ThreadID(ID{p, 0}), "t1", Counts{2, 3, 4, 5, 6, 7, 0, 0}, "", States{}},
+				{ThreadID(ID{p + 2, 0}), "t2", Counts{1, 2, 3, 4, 5, 6, 0, 0}, "", States{}},
 			}),
-			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{},
+			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{}, msi{},
 				[]ThreadUpdate{
 					{"t1", Delta{}},
 					{"t2", Delta{0, 1, 2, 3, 4, 5, 0, 0}},

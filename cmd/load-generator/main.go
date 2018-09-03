@@ -1,0 +1,107 @@
+package main
+
+import (
+	"flag"
+	"io/ioutil"
+	"math/rand"
+	"runtime"
+	"syscall"
+	"unsafe"
+)
+
+func init() {
+	var (
+		flagWaiting  = flag.Int("waiting", 1, "minimum number of waiting threads")
+		flagUserBusy = flag.Int("userbusy", 1, "minimum number of userbusy threads")
+		flagSysBusy  = flag.Int("sysbusy", 1, "minimum number of sysbusy threads")
+		flagBlocking = flag.Int("blocking", 1, "minimum number of io blocking threads")
+	)
+	flag.Parse()
+	runtime.LockOSThread()
+	for i := 0; i < *flagWaiting; i++ {
+		go waiting()
+	}
+	for i := 0; i < *flagUserBusy; i++ {
+		go userbusy()
+	}
+	for i := 0; i < *flagSysBusy; i++ {
+		go diskio(false)
+	}
+	for i := 0; i < *flagBlocking; i++ {
+		go diskio(true)
+	}
+}
+
+func main() {
+	c := make(chan struct{})
+	<-c
+}
+
+func setPrName(name string) error {
+	bytes := append([]byte(name), 0)
+	ptr := unsafe.Pointer(&bytes[0])
+
+	_, _, errno := syscall.RawSyscall6(syscall.SYS_PRCTL, syscall.PR_SET_NAME, uintptr(ptr), 0, 0, 0, 0)
+	if errno != 0 {
+		return syscall.Errno(errno)
+	}
+	return nil
+}
+
+func waiting() {
+	runtime.LockOSThread()
+	setPrName("waiting")
+	c := make(chan struct{})
+	<-c
+}
+
+func userbusy() {
+	runtime.LockOSThread()
+	setPrName("userbusy")
+	i := 1.0000001
+	for {
+		i *= i
+	}
+}
+
+func diskio(sync bool) {
+	runtime.LockOSThread()
+	if sync {
+		setPrName("blocking")
+	} else {
+		setPrName("sysbusy")
+	}
+
+	// Use random data because if we're on a filesystem that does compression like ZFS,
+	// using zeroes is almost a no-op.
+	b := make([]byte, 1024*1024)
+	_, err := rand.Read(b)
+	if err != nil {
+		panic("unable to get rands: " + err.Error())
+	}
+
+	f, err := ioutil.TempFile("", "loadgen")
+	if err != nil {
+		panic("unable to create tempfile: " + err.Error())
+	}
+	defer f.Close()
+
+	for {
+		_, err = f.WriteAt(b, 0)
+		if err != nil {
+			panic("unable to write tempfile: " + err.Error())
+		}
+
+		if sync {
+			err = f.Sync()
+			if err != nil {
+				panic("unable to sync tempfile: " + err.Error())
+			}
+		}
+
+		_, err = f.ReadAt(b, 0)
+		if err != nil {
+			panic("unable to read tempfile: " + err.Error())
+		}
+	}
+}

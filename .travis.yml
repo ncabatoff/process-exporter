@@ -4,7 +4,7 @@ services:
 language: go
 
 env:
-  - DEP_VERSION="0.5.0" IMAGE_TAG=`echo $TRAVIS_TAG|sed s/v//`
+  - IMAGE_TAG=`echo $TRAVIS_TAG|sed s/v//`
 
 go:
   - 1.10.x
@@ -12,16 +12,11 @@ go:
 before_install:
   - sudo apt-get -qq update
   - sudo apt-get install -y rpm
-  - curl -L -s https://github.com/golang/dep/releases/download/v${DEP_VERSION}/dep-linux-amd64 -o $GOPATH/bin/dep
-  - chmod +x $GOPATH/bin/dep
 
 go_import_path: github.com/ncabatoff/process-exporter
 
-install:
-  - dep ensure
-
 script:
-  - make style vet test build integ docker
+  - make style vet test build smoke integ docker
   - if [ -n "$IMAGE_TAG" ]; then make docker DOCKER_IMAGE_TAG=$IMAGE_TAG; fi
 
 after_success:

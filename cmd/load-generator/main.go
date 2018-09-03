@@ -2,12 +2,15 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"runtime"
 	"syscall"
 	"unsafe"
 )
+
+var ready = make(chan struct{})
 
 func init() {
 	var (
@@ -20,20 +23,25 @@ func init() {
 	runtime.LockOSThread()
 	for i := 0; i < *flagWaiting; i++ {
 		go waiting()
+		<-ready
 	}
 	for i := 0; i < *flagUserBusy; i++ {
 		go userbusy()
+		<-ready
 	}
 	for i := 0; i < *flagSysBusy; i++ {
 		go diskio(false)
+		<-ready
 	}
 	for i := 0; i < *flagBlocking; i++ {
 		go diskio(true)
+		<-ready
 	}
 }
 
 func main() {
 	c := make(chan struct{})
+	fmt.Println("ready")
 	<-c
 }
 
@@ -51,6 +59,8 @@ func setPrName(name string) error {
 func waiting() {
 	runtime.LockOSThread()
 	setPrName("waiting")
+	ready <- struct{}{}
+
 	c := make(chan struct{})
 	<-c
 }
@@ -58,6 +68,8 @@ func waiting() {
 func userbusy() {
 	runtime.LockOSThread()
 	setPrName("userbusy")
+	ready <- struct{}{}
+
 	i := 1.0000001
 	for {
 		i *= i
@@ -85,6 +97,8 @@ func diskio(sync bool) {
 		panic("unable to create tempfile: " + err.Error())
 	}
 	defer f.Close()
+
+	ready <- struct{}{}
 
 	for {
 		_, err = f.WriteAt(b, 0)

@@ -16,7 +16,7 @@ before_install:
 go_import_path: github.com/ncabatoff/process-exporter
 
 script:
-  - make style vet test build smoke integ docker
+  - make style vet test build smoke docker
   - if [ -n "$IMAGE_TAG" ]; then make docker DOCKER_IMAGE_TAG=$IMAGE_TAG; fi
 
 after_success:

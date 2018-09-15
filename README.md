@@ -290,7 +290,7 @@ from /proc/[pid]/stat.
 
 ### states gauge
 
-Number of processes in the group in each of various states, based on the field
+Number of threads in the group in each of various states, based on the field
 state(3) from /proc/[pid]/stat.
 
 The extra label `state` can have these values: `Running`, `Sleeping`, `Waiting`, `Zombie`, `Other`.

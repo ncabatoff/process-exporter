@@ -54,7 +54,7 @@ To select and group the processes to monitor, either provide command-line
 arguments or use a YAML configuration file. 
 
 The recommended option is to use a config file via -config.path, but for
-convenience and backwards compatability the -procnames/-namemapping options
+convenience and backwards compatibility the -procnames/-namemapping options
 exist as an alternative.
 
 ### Using a config file

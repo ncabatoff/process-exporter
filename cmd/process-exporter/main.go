@@ -26,7 +26,7 @@ or
   process-exporter [options] -procnames name1,...,nameN [-namemapping k1,v1,...,kN,vN]
 
 The recommended option is to use a config file, but for convenience and
-backwards compatability the -procnames/-namemapping options exist as an
+backwards compatibility the -procnames/-namemapping options exist as an
 alternative.
  
 The -children option (default:true) makes it so that any process that otherwise

@@ -286,11 +286,11 @@ func main() {
 		onceToStdoutDelay = flag.Duration("once-to-stdout-delay", 0,
 			"Don't bind, just wait this much time, print the metrics once to stdout, and exit")
 		procNames = flag.String("procnames", "",
-			"comma-seperated list of process names to monitor")
+			"comma-separated list of process names to monitor")
 		procfsPath = flag.String("procfs", "/proc",
 			"path to read proc data from")
 		nameMapping = flag.String("namemapping", "",
-			"comma-seperated list, alternating process name and capturing regex to apply to cmdline")
+			"comma-separated list, alternating process name and capturing regex to apply to cmdline")
 		children = flag.Bool("children", true,
 			"if a proc is tracked, track with it any children that aren't part of their own group")
 		man = flag.Bool("man", false,

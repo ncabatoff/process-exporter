@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	common "github.com/ncabatoff/process-exporter"
+	"github.com/ncabatoff/process-exporter/common"
 )
 
 type msi map[string]int

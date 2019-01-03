@@ -10,7 +10,7 @@ import (
 	"strings"
 	"text/template"
 
-	common "github.com/ncabatoff/process-exporter"
+	"github.com/ncabatoff/process-exporter/common"
 	"gopkg.in/yaml.v2"
 )
 

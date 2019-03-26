@@ -8,6 +8,7 @@ import (
 	_ "net/http/pprof"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/ncabatoff/fakescraper"
 	common "github.com/ncabatoff/process-exporter"
@@ -108,6 +109,12 @@ var (
 		[]string{"groupname"},
 		nil)
 
+	contextSwitchesDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_context_switches_total",
+		"Context switches",
+		[]string{"groupname", "ctxswitchtype"},
+		nil)
+
 	membytesDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_memory_bytes",
 		"number of bytes of memory in use",
@@ -162,6 +169,12 @@ var (
 		nil,
 		nil)
 
+	threadWchanDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_threads_wchan",
+		"Number of threads in this group waiting on each wchan",
+		[]string{"groupname", "wchan"},
+		nil)
+
 	threadCountDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_thread_count",
 		"Number of threads in this group with same threadname",
@@ -191,6 +204,12 @@ var (
 		"Minor page faults for these threads",
 		[]string{"groupname", "threadname"},
 		nil)
+
+	threadContextSwitchesDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_thread_context_switches_total",
+		"Context switches for these threads",
+		[]string{"groupname", "threadname", "ctxswitchtype"},
+		nil)
 )
 
 type (
@@ -203,6 +222,10 @@ type (
 		mapping map[string]*prefixRegex
 	}
 )
+
+func (nmr *nameMapperRegex) String() string {
+	return fmt.Sprintf("%+v", nmr.mapping)
+}
 
 // Create a nameMapperRegex based on a string given as the -namemapper argument.
 func parseNameMapper(s string) (*nameMapperRegex, error) {
@@ -236,7 +259,7 @@ func parseNameMapper(s string) (*nameMapperRegex, error) {
 	return &nameMapperRegex{mapper}, nil
 }
 
-func (nmr *nameMapperRegex) MatchAndName(nacl common.NameAndCmdline) (bool, string) {
+func (nmr *nameMapperRegex) MatchAndName(nacl common.ProcAttributes) (bool, string) {
 	if pregex, ok := nmr.mapping[nacl.Name]; ok {
 		if pregex == nil {
 			return true, nacl.Name
@@ -260,8 +283,8 @@ func main() {
 			"Address on which to expose metrics and web interface.")
 		metricsPath = flag.String("web.telemetry-path", "/metrics",
 			"Path under which to expose metrics.")
-		onceToStdout = flag.Bool("once-to-stdout", false,
-			"Don't bind, instead just print the metrics once to stdout and exit")
+		onceToStdoutDelay = flag.Duration("once-to-stdout-delay", 0,
+			"Don't bind, just wait this much time, print the metrics once to stdout, and exit")
 		procNames = flag.String("procnames", "",
 			"comma-seperated list of process names to monitor")
 		procfsPath = flag.String("procfs", "/proc",
@@ -270,14 +293,14 @@ func main() {
 			"comma-seperated list, alternating process name and capturing regex to apply to cmdline")
 		children = flag.Bool("children", true,
 			"if a proc is tracked, track with it any children that aren't part of their own group")
-		threads = flag.Bool("threads", false,
-			"report on per-threadname metrics as well")
 		man = flag.Bool("man", false,
 			"print manual")
 		configPath = flag.String("config.path", "",
 			"path to YAML config file")
 		recheck = flag.Bool("recheck", false,
 			"recheck process names on each scrape")
+		debug = flag.Bool("debug", false,
+			"log debugging information to stdout")
 	)
 	flag.Parse()
 
@@ -293,12 +316,15 @@ func main() {
 			log.Fatalf("-config.path cannot be used with -namemapping or -procnames")
 		}
 
-		cfg, err := config.ReadFile(*configPath)
+		cfg, err := config.ReadFile(*configPath, *debug)
 		if err != nil {
 			log.Fatalf("error reading config file %q: %v", *configPath, err)
 		}
 		log.Printf("Reading metrics from %s based on %q", *procfsPath, *configPath)
 		matchnamer = cfg.MatchNamers
+		if *debug {
+			log.Printf("using config matchnamer: %v", cfg.MatchNamers)
+		}
 	} else {
 		namemapper, err := parseNameMapper(*nameMapping)
 		if err != nil {
@@ -316,22 +342,26 @@ func main() {
 		}
 
 		log.Printf("Reading metrics from %s for procnames: %v", *procfsPath, names)
+		if *debug {
+			log.Printf("using cmdline matchnamer: %v", namemapper)
+		}
 		matchnamer = namemapper
 	}
 
-	pc, err := NewProcessCollector(*procfsPath, *children, *threads, matchnamer, *recheck)
+	pc, err := NewProcessCollector(*procfsPath, *children, matchnamer, *recheck, *debug)
 	if err != nil {
 		log.Fatalf("Error initializing: %v", err)
 	}
 
 	prometheus.MustRegister(pc)
 
-	if *onceToStdout {
+	if *onceToStdoutDelay != 0 {
 		// We throw away the first result because that first collection primes the pump, and
 		// otherwise we won't see our counter metrics.  This is specific to the implementation
 		// of NamedProcessCollector.Collect().
 		fscraper := fakescraper.NewFakeScraper()
 		fscraper.Scrape()
+		time.Sleep(*onceToStdoutDelay)
 		fmt.Print(fscraper.Scrape())
 		return
 	}
@@ -361,34 +391,37 @@ type (
 	NamedProcessCollector struct {
 		scrapeChan chan scrapeRequest
 		*proc.Grouper
-		threads              bool
 		source               proc.Source
 		scrapeErrors         int
 		scrapeProcReadErrors int
 		scrapePartialErrors  int
+		debug                bool
 	}
 )
 
 func NewProcessCollector(
 	procfsPath string,
 	children bool,
-	threads bool,
 	n common.MatchNamer,
 	recheck bool,
+	debug bool,
 ) (*NamedProcessCollector, error) {
-	fs, err := proc.NewFS(procfsPath)
+	fs, err := proc.NewFS(procfsPath, debug)
 	if err != nil {
 		return nil, err
 	}
 	p := &NamedProcessCollector{
 		scrapeChan: make(chan scrapeRequest),
-		Grouper:    proc.NewGrouper(n, children, threads, recheck),
+		Grouper:    proc.NewGrouper(n, children, recheck, debug),
 		source:     fs,
-		threads:    threads,
+		debug:      debug,
 	}
 
 	colErrs, _, err := p.Update(p.source.AllProcs())
 	if err != nil {
+		if debug {
+			log.Print(err)
+		}
 		return nil, err
 	}
 	p.scrapePartialErrors += colErrs.Partial
@@ -412,16 +445,19 @@ func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- startTimeDesc
 	ch <- majorPageFaultsDesc
 	ch <- minorPageFaultsDesc
+	ch <- contextSwitchesDesc
 	ch <- numThreadsDesc
 	ch <- statesDesc
 	ch <- scrapeErrorsDesc
 	ch <- scrapeProcReadErrorsDesc
 	ch <- scrapePartialErrorsDesc
+	ch <- threadWchanDesc
 	ch <- threadCountDesc
 	ch <- threadCpuSecsDesc
 	ch <- threadIoBytesDesc
 	ch <- threadMajorPageFaultsDesc
 	ch <- threadMinorPageFaultsDesc
+	ch <- threadContextSwitchesDesc
 }
 
 // Collect implements prometheus.Collector.
@@ -453,6 +489,8 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 				prometheus.GaugeValue, float64(gcounts.Memory.ResidentBytes), gname, "resident")
 			ch <- prometheus.MustNewConstMetric(membytesDesc,
 				prometheus.GaugeValue, float64(gcounts.Memory.VirtualBytes), gname, "virtual")
+			ch <- prometheus.MustNewConstMetric(membytesDesc,
+				prometheus.GaugeValue, float64(gcounts.Memory.VmSwapBytes), gname, "swapped")
 			ch <- prometheus.MustNewConstMetric(startTimeDesc,
 				prometheus.GaugeValue, float64(gcounts.OldestStartTime.Unix()), gname)
 			ch <- prometheus.MustNewConstMetric(openFDsDesc,
@@ -471,6 +509,10 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 				prometheus.CounterValue, float64(gcounts.MajorPageFaults), gname)
 			ch <- prometheus.MustNewConstMetric(minorPageFaultsDesc,
 				prometheus.CounterValue, float64(gcounts.MinorPageFaults), gname)
+			ch <- prometheus.MustNewConstMetric(contextSwitchesDesc,
+				prometheus.CounterValue, float64(gcounts.CtxSwitchVoluntary), gname, "voluntary")
+			ch <- prometheus.MustNewConstMetric(contextSwitchesDesc,
+				prometheus.CounterValue, float64(gcounts.CtxSwitchNonvoluntary), gname, "nonvoluntary")
 			ch <- prometheus.MustNewConstMetric(numThreadsDesc,
 				prometheus.GaugeValue, float64(gcounts.NumThreads), gname)
 			ch <- prometheus.MustNewConstMetric(statesDesc,
@@ -483,30 +525,40 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 				prometheus.GaugeValue, float64(gcounts.States.Zombie), gname, "Zombie")
 			ch <- prometheus.MustNewConstMetric(statesDesc,
 				prometheus.GaugeValue, float64(gcounts.States.Other), gname, "Other")
-			if p.threads {
-				for _, thr := range gcounts.Threads {
-					ch <- prometheus.MustNewConstMetric(threadCountDesc,
-						prometheus.GaugeValue, float64(thr.NumThreads),
-						gname, thr.Name)
-					ch <- prometheus.MustNewConstMetric(threadCpuSecsDesc,
-						prometheus.CounterValue, float64(thr.CPUUserTime),
-						gname, thr.Name, "user")
-					ch <- prometheus.MustNewConstMetric(threadCpuSecsDesc,
-						prometheus.CounterValue, float64(thr.CPUSystemTime),
-						gname, thr.Name, "system")
-					ch <- prometheus.MustNewConstMetric(threadIoBytesDesc,
-						prometheus.CounterValue, float64(thr.ReadBytes),
-						gname, thr.Name, "read")
-					ch <- prometheus.MustNewConstMetric(threadIoBytesDesc,
-						prometheus.CounterValue, float64(thr.WriteBytes),
-						gname, thr.Name, "write")
-					ch <- prometheus.MustNewConstMetric(threadMajorPageFaultsDesc,
-						prometheus.CounterValue, float64(thr.MajorPageFaults),
-						gname, thr.Name)
-					ch <- prometheus.MustNewConstMetric(threadMinorPageFaultsDesc,
-						prometheus.CounterValue, float64(thr.MinorPageFaults),
-						gname, thr.Name)
-				}
+
+			for wchan, count := range gcounts.Wchans {
+				ch <- prometheus.MustNewConstMetric(threadWchanDesc,
+					prometheus.GaugeValue, float64(count), gname, wchan)
+			}
+
+			for _, thr := range gcounts.Threads {
+				ch <- prometheus.MustNewConstMetric(threadCountDesc,
+					prometheus.GaugeValue, float64(thr.NumThreads),
+					gname, thr.Name)
+				ch <- prometheus.MustNewConstMetric(threadCpuSecsDesc,
+					prometheus.CounterValue, float64(thr.CPUUserTime),
+					gname, thr.Name, "user")
+				ch <- prometheus.MustNewConstMetric(threadCpuSecsDesc,
+					prometheus.CounterValue, float64(thr.CPUSystemTime),
+					gname, thr.Name, "system")
+				ch <- prometheus.MustNewConstMetric(threadIoBytesDesc,
+					prometheus.CounterValue, float64(thr.ReadBytes),
+					gname, thr.Name, "read")
+				ch <- prometheus.MustNewConstMetric(threadIoBytesDesc,
+					prometheus.CounterValue, float64(thr.WriteBytes),
+					gname, thr.Name, "write")
+				ch <- prometheus.MustNewConstMetric(threadMajorPageFaultsDesc,
+					prometheus.CounterValue, float64(thr.MajorPageFaults),
+					gname, thr.Name)
+				ch <- prometheus.MustNewConstMetric(threadMinorPageFaultsDesc,
+					prometheus.CounterValue, float64(thr.MinorPageFaults),
+					gname, thr.Name)
+				ch <- prometheus.MustNewConstMetric(threadContextSwitchesDesc,
+					prometheus.CounterValue, float64(thr.CtxSwitchVoluntary),
+					gname, thr.Name, "voluntary")
+				ch <- prometheus.MustNewConstMetric(threadContextSwitchesDesc,
+					prometheus.CounterValue, float64(thr.CtxSwitchNonvoluntary),
+					gname, thr.Name, "nonvoluntary")
 			}
 		}
 	}

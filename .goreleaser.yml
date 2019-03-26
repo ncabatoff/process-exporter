@@ -15,6 +15,9 @@ builds:
       - 5
       - 6
       - 7
+archive:
+  name_template: "process-exporter-{{ .Version }}.{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+  wrap_in_directory: true
 nfpm:
   homepage: https://github.com/ncabatoff/process-exporter
   maintainer: nick.cabatoff+procexp@gmail.com
@@ -33,14 +36,8 @@ nfpm:
     postremove: "packaging/scripts/postremove.sh"
     preremove: "packaging/scripts/preremove.sh"
 release:
+  github:
+    owner: ncabatoff
+    name: process-exporter
   draft: false
-  prerelease: false
-dockers:
-  - image: ncabatoff/process-exporter
-    dockerfile: Dockerfile.goreleaser
-    binary: process-exporter
-    goos: linux
-    goarch: amd64
-    tag_templates:
-      - latest
-      - "{{ .Version }}"
+  prerelease: true

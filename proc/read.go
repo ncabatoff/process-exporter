@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/prometheus/procfs"
+	"github.com/ncabatoff/procfs"
 )
 
 // ErrProcNotExist indicates a process couldn't be read because it doesn't exist,
@@ -28,26 +28,30 @@ type (
 
 	// Static contains data read from /proc/pid/*
 	Static struct {
-		Name      string
-		Cmdline   []string
-		ParentPid int
-		StartTime time.Time
+		Name         string
+		Cmdline      []string
+		ParentPid    int
+		StartTime    time.Time
+		EffectiveUID int
 	}
 
 	// Counts are metric counters common to threads and processes and groups.
 	Counts struct {
-		CPUUserTime     float64
-		CPUSystemTime   float64
-		ReadBytes       uint64
-		WriteBytes      uint64
-		MajorPageFaults uint64
-		MinorPageFaults uint64
+		CPUUserTime           float64
+		CPUSystemTime         float64
+		ReadBytes             uint64
+		WriteBytes            uint64
+		MajorPageFaults       uint64
+		MinorPageFaults       uint64
+		CtxSwitchVoluntary    uint64
+		CtxSwitchNonvoluntary uint64
 	}
 
 	// Memory describes a proc's memory usage.
 	Memory struct {
 		ResidentBytes uint64
 		VirtualBytes  uint64
+		VmSwapBytes   uint64
 	}
 
 	// Filedesc describes a proc's file descriptor usage and soft limit.
@@ -58,6 +62,7 @@ type (
 		Limit uint64
 	}
 
+	// States counts how many threads are in each state.
 	States struct {
 		Running  int
 		Sleeping int
@@ -73,13 +78,16 @@ type (
 		Filedesc
 		NumThreads uint64
 		States
+		Wchan string
 	}
 
-	// Thread contains the name and counts for a thread.
+	// Thread contains per-thread data.
 	Thread struct {
 		ThreadID
 		ThreadName string
 		Counts
+		Wchan string
+		States
 	}
 
 	// IDInfo groups all info for a single process.
@@ -112,6 +120,7 @@ type (
 		// and 0 on complete success, 1 if some (like I/O) couldn't be read.
 		GetMetrics() (Metrics, int, error)
 		GetStates() (States, error)
+		GetWchan() (string, error)
 		GetCounts() (Counts, int, error)
 		GetThreads() ([]Thread, error)
 	}
@@ -122,9 +131,11 @@ type (
 		procfs.Proc
 		procid  *ID
 		stat    *procfs.ProcStat
+		status  *procfs.ProcStatus
 		cmdline []string
 		io      *procfs.ProcIO
 		fs      *FS
+		wchan   *string
 	}
 
 	proc struct {
@@ -176,10 +187,15 @@ type (
 	// FS implements Source.
 	FS struct {
 		procfs.FS
-		BootTime   int64
+		BootTime   uint64
 		MountPoint string
+		debug      bool
 	}
 )
+
+func (ii IDInfo) String() string {
+	return fmt.Sprintf("%+v:%+v", ii.ID, ii.Static)
+}
 
 // Add adds c2 to the counts.
 func (c *Counts) Add(c2 Delta) {
@@ -189,6 +205,8 @@ func (c *Counts) Add(c2 Delta) {
 	c.WriteBytes += c2.WriteBytes
 	c.MajorPageFaults += c2.MajorPageFaults
 	c.MinorPageFaults += c2.MinorPageFaults
+	c.CtxSwitchVoluntary += c2.CtxSwitchVoluntary
+	c.CtxSwitchNonvoluntary += c2.CtxSwitchNonvoluntary
 }
 
 // Sub subtracts c2 from the counts.
@@ -199,6 +217,8 @@ func (c Counts) Sub(c2 Counts) Delta {
 	c.WriteBytes -= c2.WriteBytes
 	c.MajorPageFaults -= c2.MajorPageFaults
 	c.MinorPageFaults -= c2.MinorPageFaults
+	c.CtxSwitchVoluntary -= c2.CtxSwitchVoluntary
+	c.CtxSwitchNonvoluntary -= c2.CtxSwitchNonvoluntary
 	return Delta(c)
 }
 
@@ -244,6 +264,10 @@ func (p IDInfo) GetStates() (States, error) {
 	return p.States, nil
 }
 
+func (p IDInfo) GetWchan() (string, error) {
+	return p.Wchan, nil
+}
+
 func (p *proccache) GetPid() int {
 	return p.Proc.PID
 }
@@ -258,6 +282,18 @@ func (p *proccache) getStat() (procfs.ProcStat, error) {
 	}
 
 	return *p.stat, nil
+}
+
+func (p *proccache) getStatus() (procfs.ProcStatus, error) {
+	if p.status == nil {
+		status, err := p.Proc.NewStatus()
+		if err != nil {
+			return procfs.ProcStatus{}, err
+		}
+		p.status = &status
+	}
+
+	return *p.status, nil
 }
 
 // GetProcID implements Proc.
@@ -284,6 +320,17 @@ func (p *proccache) getCmdLine() ([]string, error) {
 	return p.cmdline, nil
 }
 
+func (p *proccache) getWchan() (string, error) {
+	if p.wchan == nil {
+		wchan, err := p.Proc.Wchan()
+		if err != nil {
+			return "", err
+		}
+		p.wchan = &wchan
+	}
+	return *p.wchan, nil
+}
+
 func (p *proccache) getIo() (procfs.ProcIO, error) {
 	if p.io == nil {
 		io, err := p.Proc.NewIO()
@@ -302,23 +349,40 @@ func (p *proccache) GetStatic() (Static, error) {
 	if err != nil {
 		return Static{}, err
 	}
+
 	// /proc/<pid>/stat is normally world-readable.
 	stat, err := p.getStat()
 	if err != nil {
 		return Static{}, err
 	}
-	startTime := time.Unix(p.fs.BootTime, 0).UTC()
+	startTime := time.Unix(int64(p.fs.BootTime), 0).UTC()
 	startTime = startTime.Add(time.Second / userHZ * time.Duration(stat.Starttime))
+
+	// /proc/<pid>/status is normally world-readable.
+	status, err := p.getStatus()
+	if err != nil {
+		return Static{}, err
+	}
+
 	return Static{
-		Name:      stat.Comm,
-		Cmdline:   cmdline,
-		ParentPid: stat.PPID,
-		StartTime: startTime,
+		Name:         stat.Comm,
+		Cmdline:      cmdline,
+		ParentPid:    stat.PPID,
+		StartTime:    startTime,
+		EffectiveUID: status.UIDEffective,
 	}, nil
 }
 
 func (p proc) GetCounts() (Counts, int, error) {
 	stat, err := p.getStat()
+	if err != nil {
+		if err == os.ErrNotExist {
+			err = ErrProcNotExist
+		}
+		return Counts{}, 0, err
+	}
+
+	status, err := p.getStatus()
 	if err != nil {
 		if err == os.ErrNotExist {
 			err = ErrProcNotExist
@@ -332,13 +396,19 @@ func (p proc) GetCounts() (Counts, int, error) {
 		softerrors++
 	}
 	return Counts{
-		CPUUserTime:     float64(stat.UTime) / userHZ,
-		CPUSystemTime:   float64(stat.STime) / userHZ,
-		ReadBytes:       io.ReadBytes,
-		WriteBytes:      io.WriteBytes,
-		MajorPageFaults: uint64(stat.MajFlt),
-		MinorPageFaults: uint64(stat.MinFlt),
+		CPUUserTime:           float64(stat.UTime) / userHZ,
+		CPUSystemTime:         float64(stat.STime) / userHZ,
+		ReadBytes:             io.ReadBytes,
+		WriteBytes:            io.WriteBytes,
+		MajorPageFaults:       uint64(stat.MajFlt),
+		MinorPageFaults:       uint64(stat.MinFlt),
+		CtxSwitchVoluntary:    uint64(status.VoluntaryCtxtSwitches),
+		CtxSwitchNonvoluntary: uint64(status.NonvoluntaryCtxtSwitches),
 	}, softerrors, nil
+}
+
+func (p proc) GetWchan() (string, error) {
+	return p.getWchan()
 }
 
 func (p proc) GetStates() (States, error) {
@@ -380,6 +450,11 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 	// Ditto for states
 	states, _ := p.GetStates()
 
+	status, err := p.getStatus()
+	if err != nil {
+		return Metrics{}, 0, err
+	}
+
 	numfds, err := p.Proc.FileDescriptorsLen()
 	if err != nil {
 		numfds = -1
@@ -391,11 +466,17 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 		return Metrics{}, 0, err
 	}
 
+	wchan, err := p.getWchan()
+	if err != nil {
+		softerrors |= 1
+	}
+
 	return Metrics{
 		Counts: counts,
 		Memory: Memory{
 			ResidentBytes: uint64(stat.ResidentMemory()),
 			VirtualBytes:  uint64(stat.VirtualMemory()),
+			VmSwapBytes:   uint64(status.VmSwapKB * 1024),
 		},
 		Filedesc: Filedesc{
 			Open:  int64(numfds),
@@ -403,6 +484,7 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 		},
 		NumThreads: uint64(stat.NumThreads),
 		States:     states,
+		Wchan:      wchan,
 	}, softerrors, nil
 }
 
@@ -433,10 +515,15 @@ func (p proc) GetThreads() ([]Thread, error) {
 			continue
 		}
 
+		wchan, _ := iter.GetWchan()
+		states, _ := iter.GetStates()
+
 		threads = append(threads, Thread{
 			ThreadID:   ThreadID(id),
 			ThreadName: static.Name,
 			Counts:     counts,
+			Wchan:      wchan,
+			States:     states,
 		})
 	}
 	err = iter.Close()
@@ -455,7 +542,7 @@ const userHZ = 100
 
 // NewFS returns a new FS mounted under the given mountPoint. It will error
 // if the mount point can't be read.
-func NewFS(mountPoint string) (*FS, error) {
+func NewFS(mountPoint string, debug bool) (*FS, error) {
 	fs, err := procfs.NewFS(mountPoint)
 	if err != nil {
 		return nil, err
@@ -464,7 +551,7 @@ func NewFS(mountPoint string) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FS{fs, stat.BootTime, mountPoint}, nil
+	return &FS{fs, stat.BootTime, mountPoint, debug}, nil
 }
 
 func (fs *FS) threadFs(pid int) (*FS, error) {
@@ -473,7 +560,7 @@ func (fs *FS) threadFs(pid int) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FS{tfs, fs.BootTime, mountPoint}, nil
+	return &FS{tfs, fs.BootTime, mountPoint, false}, nil
 }
 
 // AllProcs implements Source.

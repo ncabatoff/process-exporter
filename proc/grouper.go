@@ -3,6 +3,7 @@ package proc
 import (
 	"time"
 
+	seq "github.com/ncabatoff/go-seq/seq"
 	common "github.com/ncabatoff/process-exporter"
 )
 
@@ -15,6 +16,7 @@ type (
 		groupAccum  map[string]Counts
 		tracker     *Tracker
 		threadAccum map[string]map[string]Threads
+		debug       bool
 	}
 
 	// GroupByName maps group name to group metrics.
@@ -31,7 +33,8 @@ type (
 	Group struct {
 		Counts
 		States
-		Procs int
+		Wchans map[string]int
+		Procs  int
 		Memory
 		OldestStartTime time.Time
 		OpenFDs         uint64
@@ -43,28 +46,15 @@ type (
 
 // Returns true if x < y.  Test designers should ensure they always have
 // a unique name/numthreads combination for each group.
-func lessThreads(x, y Threads) bool {
-	if x.Name > y.Name {
-		return false
-	}
-	if x.Name < y.Name {
-		return true
-	}
-	if x.NumThreads > y.NumThreads {
-		return false
-	}
-	if x.NumThreads < y.NumThreads {
-		return true
-	}
-	return lessCounts(x.Counts, y.Counts)
-}
+func lessThreads(x, y Threads) bool { return seq.Compare(x, y) < 0 }
 
 // NewGrouper creates a grouper.
-func NewGrouper(namer common.MatchNamer, trackChildren, trackThreads, alwaysRecheck bool) *Grouper {
+func NewGrouper(namer common.MatchNamer, trackChildren, alwaysRecheck, debug bool) *Grouper {
 	g := Grouper{
 		groupAccum:  make(map[string]Counts),
 		threadAccum: make(map[string]map[string]Threads),
-		tracker:     NewTracker(namer, trackChildren, trackThreads, alwaysRecheck),
+		tracker:     NewTracker(namer, trackChildren, alwaysRecheck, debug),
+		debug:       debug,
 	}
 	return &g
 }
@@ -75,6 +65,7 @@ func groupadd(grp Group, ts Update) Group {
 	grp.Procs++
 	grp.Memory.ResidentBytes += ts.Memory.ResidentBytes
 	grp.Memory.VirtualBytes += ts.Memory.VirtualBytes
+	grp.Memory.VmSwapBytes += ts.Memory.VmSwapBytes
 	if ts.Filedesc.Open != -1 {
 		grp.OpenFDs += uint64(ts.Filedesc.Open)
 	}
@@ -87,6 +78,13 @@ func groupadd(grp Group, ts Update) Group {
 	grp.States.Add(ts.States)
 	if grp.OldestStartTime == zeroTime || ts.Start.Before(grp.OldestStartTime) {
 		grp.OldestStartTime = ts.Start
+	}
+
+	if grp.Wchans == nil {
+		grp.Wchans = make(map[string]int)
+	}
+	for wchan, count := range ts.Wchans {
+		grp.Wchans[wchan] += count
 	}
 
 	return grp

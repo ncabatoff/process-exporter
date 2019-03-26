@@ -39,9 +39,6 @@ walking the process tree upwards.  In other words, resource usage of
 subprocesses is added to their parent's usage unless the subprocess identifies
 as a different group name.
 
--threads (default:false) means that metrics will be broken down by thread name
-as well as group name.
-
 -recheck (default:false) means that on each scrape the process names are
 re-evaluated. This is disabled by default as an optimization, but since
 processes can choose to change their names, this may result in a process
@@ -99,6 +96,7 @@ Template variables available:
 - `{{.Comm}}` contains the basename of the original executable, i.e. 2nd field in `/proc/<pid>/stat`
 - `{{.ExeBase}}` contains the basename of the executable
 - `{{.ExeFull}}` contains the fully qualified path of the executable
+- `{{.Username}}` contains the username of the effective user
 - `{{.Matches}}` map contains all the matches resulting from applying cmdline regexps
 
 #### Using a config file: process selectors
@@ -241,6 +239,12 @@ Number of major page faults based on /proc/[pid]/stat field majflt(12).
 
 Number of minor page faults based on /proc/[pid]/stat field minflt(10).
 
+### context_switches_total counter
+
+Number of context switches based on /proc/[pid]/status fields voluntary_ctxt_switches
+and nonvoluntary_ctxt_switches.  The extra label `ctxswitchtype` can have two values:
+`voluntary` and `nonvoluntary`.
+
 ### memory_bytes gauge
 
 Number of bytes of memory used.  The extra label `memtype` can have two values:
@@ -250,6 +254,8 @@ Number of bytes of memory used.  The extra label `memtype` can have two values:
 > This is just the pages which count toward text, data, or stack space.  This does not include pages which have not been demand-loaded in, or which are swapped out.
 
 *virtual*: Field vsize(23) from /proc/[pid]/stat, virtual memory size.
+
+*swapped*: Field VmSwap from /proc/[pid]/status, translated from KB to bytes.
 
 ### open_filedesc gauge
 
@@ -284,15 +290,12 @@ from /proc/[pid]/stat.
 
 ### states gauge
 
-Number of processes in the group in each of various states, based on the field
+Number of threads in the group in each of various states, based on the field
 state(3) from /proc/[pid]/stat.
 
 The extra label `state` can have these values: `Running`, `Sleeping`, `Waiting`, `Zombie`, `Other`.
 
 ## Group Thread Metrics
-
-Since publishing thread metrics adds a lot of overhead, these metrics are disabled
-by default.  Use the -threads command-line argument to enable them.
 
 All these metrics start with `namedprocess_namegroup_` and have at minimum
 the labels `groupname` and `threadname`.  `threadname` is field comm(2) from
@@ -323,6 +326,10 @@ Same as major_page_faults_total, but broken down per-thread subgroup.
 
 Same as minor_page_faults_total, but broken down per-thread subgroup.
 
+### thread_context_switches_total counter
+
+Same as context_switches_total, but broken down per-thread subgroup.
+
 ## Instrumentation cost
 
 process-exporter will consume CPU in proportion to the number of processes in
@@ -337,3 +344,12 @@ minimal: each time a scrape occurs, it will parse of /proc/$pid/stat and
 ## Dashboards
 
 An example Grafana dashboard to view the metrics is available at https://grafana.net/dashboards/249
+
+## Building
+
+Install [dep](https://github.com/golang/dep), then:
+
+```
+dep ensure
+make
+```

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/user"
 	"testing"
 	"time"
 
@@ -30,7 +29,7 @@ func procInfoIter(ps ...IDInfo) *procIterator {
 }
 
 func allprocs(procpath string) Iter {
-	fs, err := NewFS(procpath)
+	fs, err := NewFS(procpath, false)
 	if err != nil {
 		cwd, _ := os.Getwd()
 		panic("can't read " + procpath + ", cwd=" + cwd + ", err=" + fmt.Sprintf("%v", err))
@@ -62,10 +61,11 @@ func TestReadFixture(t *testing.T) {
 
 	stime, _ := time.Parse(time.RFC3339Nano, "2017-10-19T22:52:51.19Z")
 	wantstatic := Static{
-		Name:      "process-exporte",
-		Cmdline:   []string{"./process-exporter", "-procnames", "bash"},
-		ParentPid: 10884,
-		StartTime: stime,
+		Name:         "process-exporte",
+		Cmdline:      []string{"./process-exporter", "-procnames", "bash"},
+		ParentPid:    10884,
+		StartTime:    stime,
+		EffectiveUID: 1000,
 	}
 	if diff := cmp.Diff(pii.Static, wantstatic); diff != "" {
 		t.Errorf("static differs: (-got +want)\n%s", diff)
@@ -73,16 +73,19 @@ func TestReadFixture(t *testing.T) {
 
 	wantmetrics := Metrics{
 		Counts: Counts{
-			CPUUserTime:     0.1,
-			CPUSystemTime:   0.04,
-			ReadBytes:       1814455,
-			WriteBytes:      0,
-			MajorPageFaults: 0x2ff,
-			MinorPageFaults: 0x643,
+			CPUUserTime:           0.1,
+			CPUSystemTime:         0.04,
+			ReadBytes:             1814455,
+			WriteBytes:            0,
+			MajorPageFaults:       0x2ff,
+			MinorPageFaults:       0x643,
+			CtxSwitchVoluntary:    72,
+			CtxSwitchNonvoluntary: 6,
 		},
 		Memory: Memory{
 			ResidentBytes: 0x7b1000,
 			VirtualBytes:  0x1061000,
+			VmSwapBytes:   0x2800,
 		},
 		Filedesc: Filedesc{
 			Open:  5,
@@ -143,45 +146,6 @@ func TestAllProcs(t *testing.T) {
 	noerr(t, err)
 	if count == 0 {
 		t.Errorf("got %d, want 0", count)
-	}
-}
-
-// Verify that pid 1 doesn't provide I/O or FD stats.  This test
-// fails if pid 1 is owned by the same user running the tests,
-// so it's skipped if the current user's uid is 0 (root).  That
-// isn't foolproof but it should handle most cases.
-func TestMissingIo(t *testing.T) {
-	u, err := user.Current()
-	if err != nil {
-		t.Fatalf("Unable to get current user: %v", err)
-	}
-	if u.Uid == "0" {
-		return
-	}
-	procs := allprocs("/proc")
-	for procs.Next() {
-		if procs.GetPid() != 1 {
-			continue
-		}
-		met, softerrs, err := procs.GetMetrics()
-		noerr(t, err)
-
-		if softerrs != 1 {
-			t.Errorf("got %d, want %d", softerrs, 1)
-		}
-		if met.ReadBytes != uint64(0) {
-			t.Errorf("got %d, want %d", met.ReadBytes, 0)
-		}
-		if met.WriteBytes != uint64(0) {
-			t.Errorf("got %d, want %d", met.WriteBytes, 0)
-		}
-		if met.ResidentBytes == uint64(0) {
-			t.Errorf("got %d, want non-zero", met.ResidentBytes)
-		}
-		if met.Filedesc.Limit == uint64(0) {
-			t.Errorf("got %d, want non-zero", met.Filedesc.Limit)
-		}
-		return
 	}
 }
 

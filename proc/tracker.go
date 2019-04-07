@@ -206,6 +206,9 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 	var cerrs CollectErrors
 	procID, err := proc.GetProcID()
 	if err != nil {
+		if t.debug {
+			log.Printf("error getting proc ID for pid %+v: %v", proc.GetPid(), err)
+		}
 		return nil, cerrs
 	}
 
@@ -231,6 +234,9 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 	var threads []Thread
 	threads, err = proc.GetThreads()
 	if err != nil {
+		if t.debug {
+			log.Printf("can't read thread metrics for %+v: %v", procID, err)
+		}
 		softerrors |= 1
 	}
 	cerrs.Partial += softerrors

@@ -26,7 +26,7 @@ or
   process-exporter [options] -procnames name1,...,nameN [-namemapping k1,v1,...,kN,vN]
 
 The recommended option is to use a config file, but for convenience and
-backwards compatability the -procnames/-namemapping options exist as an
+backwards compatibility the -procnames/-namemapping options exist as an
 alternative.
  
 The -children option (default:true) makes it so that any process that otherwise
@@ -286,11 +286,11 @@ func main() {
 		onceToStdoutDelay = flag.Duration("once-to-stdout-delay", 0,
 			"Don't bind, just wait this much time, print the metrics once to stdout, and exit")
 		procNames = flag.String("procnames", "",
-			"comma-seperated list of process names to monitor")
+			"comma-separated list of process names to monitor")
 		procfsPath = flag.String("procfs", "/proc",
 			"path to read proc data from")
 		nameMapping = flag.String("namemapping", "",
-			"comma-seperated list, alternating process name and capturing regex to apply to cmdline")
+			"comma-separated list, alternating process name and capturing regex to apply to cmdline")
 		children = flag.Bool("children", true,
 			"if a proc is tracked, track with it any children that aren't part of their own group")
 		man = flag.Bool("man", false,

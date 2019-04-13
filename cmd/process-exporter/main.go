@@ -293,6 +293,8 @@ func main() {
 			"comma-separated list, alternating process name and capturing regex to apply to cmdline")
 		children = flag.Bool("children", true,
 			"if a proc is tracked, track with it any children that aren't part of their own group")
+		threads = flag.Bool("threads", true,
+			"report on per-threadname metrics as well")
 		man = flag.Bool("man", false,
 			"print manual")
 		configPath = flag.String("config.path", "",
@@ -348,7 +350,7 @@ func main() {
 		matchnamer = namemapper
 	}
 
-	pc, err := NewProcessCollector(*procfsPath, *children, matchnamer, *recheck, *debug)
+	pc, err := NewProcessCollector(*procfsPath, *children, *threads, matchnamer, *recheck, *debug)
 	if err != nil {
 		log.Fatalf("Error initializing: %v", err)
 	}
@@ -391,6 +393,7 @@ type (
 	NamedProcessCollector struct {
 		scrapeChan chan scrapeRequest
 		*proc.Grouper
+		threads              bool
 		source               proc.Source
 		scrapeErrors         int
 		scrapeProcReadErrors int
@@ -402,6 +405,7 @@ type (
 func NewProcessCollector(
 	procfsPath string,
 	children bool,
+	threads bool,
 	n common.MatchNamer,
 	recheck bool,
 	debug bool,
@@ -412,8 +416,9 @@ func NewProcessCollector(
 	}
 	p := &NamedProcessCollector{
 		scrapeChan: make(chan scrapeRequest),
-		Grouper:    proc.NewGrouper(n, children, recheck, debug),
+		Grouper:    proc.NewGrouper(n, children, threads, recheck, debug),
 		source:     fs,
+		threads:    threads,
 		debug:      debug,
 	}
 
@@ -531,34 +536,36 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 					prometheus.GaugeValue, float64(count), gname, wchan)
 			}
 
-			for _, thr := range gcounts.Threads {
-				ch <- prometheus.MustNewConstMetric(threadCountDesc,
-					prometheus.GaugeValue, float64(thr.NumThreads),
-					gname, thr.Name)
-				ch <- prometheus.MustNewConstMetric(threadCpuSecsDesc,
-					prometheus.CounterValue, float64(thr.CPUUserTime),
-					gname, thr.Name, "user")
-				ch <- prometheus.MustNewConstMetric(threadCpuSecsDesc,
-					prometheus.CounterValue, float64(thr.CPUSystemTime),
-					gname, thr.Name, "system")
-				ch <- prometheus.MustNewConstMetric(threadIoBytesDesc,
-					prometheus.CounterValue, float64(thr.ReadBytes),
-					gname, thr.Name, "read")
-				ch <- prometheus.MustNewConstMetric(threadIoBytesDesc,
-					prometheus.CounterValue, float64(thr.WriteBytes),
-					gname, thr.Name, "write")
-				ch <- prometheus.MustNewConstMetric(threadMajorPageFaultsDesc,
-					prometheus.CounterValue, float64(thr.MajorPageFaults),
-					gname, thr.Name)
-				ch <- prometheus.MustNewConstMetric(threadMinorPageFaultsDesc,
-					prometheus.CounterValue, float64(thr.MinorPageFaults),
-					gname, thr.Name)
-				ch <- prometheus.MustNewConstMetric(threadContextSwitchesDesc,
-					prometheus.CounterValue, float64(thr.CtxSwitchVoluntary),
-					gname, thr.Name, "voluntary")
-				ch <- prometheus.MustNewConstMetric(threadContextSwitchesDesc,
-					prometheus.CounterValue, float64(thr.CtxSwitchNonvoluntary),
-					gname, thr.Name, "nonvoluntary")
+			if p.threads {
+				for _, thr := range gcounts.Threads {
+					ch <- prometheus.MustNewConstMetric(threadCountDesc,
+						prometheus.GaugeValue, float64(thr.NumThreads),
+						gname, thr.Name)
+					ch <- prometheus.MustNewConstMetric(threadCpuSecsDesc,
+						prometheus.CounterValue, float64(thr.CPUUserTime),
+						gname, thr.Name, "user")
+					ch <- prometheus.MustNewConstMetric(threadCpuSecsDesc,
+						prometheus.CounterValue, float64(thr.CPUSystemTime),
+						gname, thr.Name, "system")
+					ch <- prometheus.MustNewConstMetric(threadIoBytesDesc,
+						prometheus.CounterValue, float64(thr.ReadBytes),
+						gname, thr.Name, "read")
+					ch <- prometheus.MustNewConstMetric(threadIoBytesDesc,
+						prometheus.CounterValue, float64(thr.WriteBytes),
+						gname, thr.Name, "write")
+					ch <- prometheus.MustNewConstMetric(threadMajorPageFaultsDesc,
+						prometheus.CounterValue, float64(thr.MajorPageFaults),
+						gname, thr.Name)
+					ch <- prometheus.MustNewConstMetric(threadMinorPageFaultsDesc,
+						prometheus.CounterValue, float64(thr.MinorPageFaults),
+						gname, thr.Name)
+					ch <- prometheus.MustNewConstMetric(threadContextSwitchesDesc,
+						prometheus.CounterValue, float64(thr.CtxSwitchVoluntary),
+						gname, thr.Name, "voluntary")
+					ch <- prometheus.MustNewConstMetric(threadContextSwitchesDesc,
+						prometheus.CounterValue, float64(thr.CtxSwitchNonvoluntary),
+						gname, thr.Name, "nonvoluntary")
+				}
 			}
 		}
 	}

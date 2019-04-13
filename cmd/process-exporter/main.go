@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -16,6 +17,9 @@ import (
 	"github.com/ncabatoff/process-exporter/proc"
 	"github.com/prometheus/client_golang/prometheus"
 )
+
+// Version is set at build time use ldflags.
+var Version string
 
 func printManual() {
 	fmt.Print(`Usage:
@@ -297,8 +301,15 @@ func main() {
 			"recheck process names on each scrape")
 		debug = flag.Bool("debug", false,
 			"log debugging information to stdout")
+		version = flag.Bool("version", false,
+			"print version information and exit")
 	)
 	flag.Parse()
+
+	if *version {
+		fmt.Printf("process-exporter version %s\n", Version)
+		os.Exit(0)
+	}
 
 	if *man {
 		printManual()

@@ -178,7 +178,7 @@ var (
 	threadCpuSecsDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_thread_cpu_seconds_total",
 		"Cpu user/system usage in seconds",
-		[]string{"groupname", "threadname", "cpumode"},
+		[]string{"groupname", "threadname", "mode"},
 		nil)
 
 	threadIoBytesDesc = prometheus.NewDesc(

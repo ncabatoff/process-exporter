@@ -157,14 +157,14 @@ func verify(results map[string][]result) bool {
 	}
 
 	for _, result := range results["thread_cpu_seconds_total"] {
-		if result.labels["cpumode"] == "system" {
+		if result.labels["mode"] == "system" {
 			switch tname := result.labels["threadname"]; tname {
 			case "sysbusy", "blocking":
 				assertGreaterOrEqual("thread_cpu_seconds_total system "+tname, result.value, 0.00001)
 			default:
 				assertGreaterOrEqual("thread_cpu_seconds_total system "+tname, result.value, 0)
 			}
-		} else if result.labels["cpumode"] == "user" {
+		} else if result.labels["mode"] == "user" {
 			switch tname := result.labels["threadname"]; tname {
 			case "userbusy":
 				assertGreaterOrEqual("thread_cpu_seconds_total user "+tname, result.value, 0.00001)

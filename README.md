@@ -209,15 +209,9 @@ the label `groupname`.
 
 Number of processes in this group.
 
-### cpu_user_seconds_total counter
+### cpu_seconds_total counter
 
-CPU usage based on /proc/[pid]/stat field utime(14) i.e. user time.
-A value of 1 indicates that the processes in this group have been scheduled
-in user mode for a total of 1 second on a single virtual CPU.
-
-### cpu_system_seconds_total counter
-
-CPU usage based on /proc/[pid]/stat field stime(15) i.e. system time.
+CPU usage based on /proc/[pid]/stat fields utime(14) and stime(15) i.e. user and system time. This is similar to the node\_exporter's `node_cpu_seconds_total`.
 
 ### read_bytes_total counter
 

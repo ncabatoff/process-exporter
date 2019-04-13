@@ -2,19 +2,23 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/golang:1.10
+      - image: circleci/golang:1.10.8-stretch
     working_directory: /go/src/github.com/ncabatoff/process-exporter
-    environment:
-      DEP_VERSION: "0.5.0"
     steps:
       - checkout
-      - run: curl -L -s -o dep https://github.com/golang/dep/releases/download/v${DEP_VERSION}/dep-linux-amd64
-      - run: chmod +x dep
-      - run: ./dep ensure -vendor-only
-      - run: sudo apt-get -qq update
-      - run: sudo apt-get install -y rpm
-      - run: make style vet test build integ docker
       - run: make style vet test build integ
-      - setup_remote_docker:
-          docker_layer_caching: true
-      - run: make docker
+  image:
+    docker:
+      - image: docker:stable-git
+    working_directory: /go/src/github.com/ncabatoff/process-exporter
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run: docker build -t ncabatoff/process-exporter:latest .
+
+workflows:
+  version: 2
+  build_and_image:
+    jobs:
+      - build
+      - image

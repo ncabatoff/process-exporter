@@ -26,7 +26,7 @@ vet:
 
 build:
 	@echo ">> building code"
-	cd cmd/process-exporter; CGO_ENABLED=0 go build -ldflags "-X main.Version=$(TAG_VERSION)" -o ../../process-exporter -a -tags netgo
+	cd cmd/process-exporter; CGO_ENABLED=0 go build -ldflags "-X main.version=$(TAG_VERSION)" -o ../../process-exporter -a -tags netgo
 
 smoke:
 	@echo ">> smoke testing process-exporter"

@@ -19,7 +19,7 @@ import (
 )
 
 // Version is set at build time use ldflags.
-var Version string
+var version string
 
 func printManual() {
 	fmt.Print(`Usage:
@@ -301,13 +301,13 @@ func main() {
 			"recheck process names on each scrape")
 		debug = flag.Bool("debug", false,
 			"log debugging information to stdout")
-		version = flag.Bool("version", false,
+		showVersion = flag.Bool("version", false,
 			"print version information and exit")
 	)
 	flag.Parse()
 
-	if *version {
-		fmt.Printf("process-exporter version %s\n", Version)
+	if *showVersion {
+		fmt.Printf("process-exporter version %s\n", version)
 		os.Exit(0)
 	}
 

@@ -47,4 +47,10 @@ docker:
 	docker build -t "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" .
 	docker run --rm -v `pwd`/packaging:/packaging "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" $(SMOKE_TEST)
 
+dockertest:
+	docker run --rm -it -v `pwd`:/go/src/github.com/ncabatoff/process-exporter golang:1.10  make -C /go/src/github.com/ncabatoff/process-exporter test
+
+dockerinteg:
+	docker run --rm -it -v `pwd`:/go/src/github.com/ncabatoff/process-exporter golang:1.10  make -C /go/src/github.com/ncabatoff/process-exporter build integ
+
 .PHONY: all style format test vet build integ docker

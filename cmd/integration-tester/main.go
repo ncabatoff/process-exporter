@@ -44,7 +44,7 @@ func main() {
 	for i := 0; i < *flagAttempts; i++ {
 		comm := filepath.Base(*flagLoadGenerator)
 		cmdpe := exec.CommandContext(ctx, *flagProcessExporter, "-once-to-stdout-delay", "20s",
-			"-procnames", comm)
+			"-procnames", comm, "-threads=true")
 		out, err := cmdpe.Output()
 		if err != nil {
 			log.Fatalf("Error launching process-exporter %q: %v", *flagProcessExporter, err)
@@ -176,6 +176,9 @@ func verify(results map[string][]result) bool {
 
 	for _, result := range results["thread_io_bytes_total"] {
 		tname, iomode := result.labels["threadname"], result.labels["iomode"]
+		if iomode == "read" {
+			continue
+		}
 		rname := fmt.Sprintf("%s %s %s", "thread_io_bytes_total", iomode, tname)
 
 		switch tname {

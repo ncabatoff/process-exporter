@@ -45,7 +45,10 @@ install:
 docker:
 	@echo ">> building docker image"
 	docker build -t "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" .
-	docker run --rm -v `pwd`/packaging:/packaging "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" $(SMOKE_TEST)
+	docker rm configs
+	docker create -v /packaging --name configs alpine:3.4 /bin/true
+	docker cp packaging/conf configs:/packaging/conf
+	docker run --rm --volumes-from configs "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" $(SMOKE_TEST)
 
 dockertest:
 	docker run --rm -it -v `pwd`:/go/src/github.com/ncabatoff/process-exporter golang:1.10  make -C /go/src/github.com/ncabatoff/process-exporter test

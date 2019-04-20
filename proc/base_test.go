@@ -42,6 +42,10 @@ func consumeIter(pi Iter) ([]IDInfo, error) {
 
 type namer map[string]struct{}
 
+func (n namer) AddResolver(resolver common.Resolver) {
+	return
+}
+
 func newNamer(names ...string) namer {
 	nr := make(namer, len(names))
 	for _, name := range names {

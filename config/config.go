@@ -21,7 +21,8 @@ type (
 	}
 
 	FirstMatcher struct {
-		matchers []common.MatchNamer
+		matchers  []common.MatchNamer
+		resolvers []common.Resolver
 	}
 
 	Config struct {
@@ -50,6 +51,7 @@ type (
 	matchNamer struct {
 		andMatcher
 		templateNamer
+		resolvers []common.Resolver
 	}
 
 	templateParams struct {
@@ -298,5 +300,15 @@ func getMatchNamer(yamlmn interface{}) (common.MatchNamer, error) {
 		return nil, fmt.Errorf("bad name template %q: %v", nametmpl, err)
 	}
 
-	return &matchNamer{matchers, templateNamer{tmpl}}, nil
+	return &matchNamer{matchers, templateNamer{tmpl}, nil}, nil
+}
+
+// AddResolver implements common.MatchNamer interface
+func (nmr matchNamer) AddResolver(resolver common.Resolver) {
+	nmr.resolvers = append(nmr.resolvers, resolver)
+}
+
+// AddResolver implements common.MatchNamer interface
+func (fm FirstMatcher) AddResolver(resolver common.Resolver) {
+	fm.resolvers = append(fm.resolvers, resolver)
 }

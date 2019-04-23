@@ -234,8 +234,8 @@ var (
 			nil},
 	}
 	// global variables for now
-	showUser, showPod *bool
-	podDefaultLabel   *string
+	showUser, k8sEnabled *bool
+	podDefaultLabel      *string
 )
 
 type (
@@ -334,12 +334,12 @@ func parseNameMapper(s string) (*nameMapperRegex, error) {
 
 // AddResolver implements common.MatchNamer interface
 func (nmr *nameMapperRegex) AddResolver(resolver common.Resolver) {
-	nmr.resolvers = append(nmr.resolvers, resolver)
+		nmr.resolvers = append(nmr.resolvers, resolver)
 }
 
 func (nmr *nameMapperRegex) labels(nacl common.ProcAttributes) string {
 	ret := ""
-	if !*showUser && !*showPod {
+	if !*showUser && !*k8sEnabled {
 		return ret
 	}
 	for _, res := range nmr.resolvers {
@@ -348,7 +348,7 @@ func (nmr *nameMapperRegex) labels(nacl common.ProcAttributes) string {
 	if *showUser {
 		ret += "user:" + nacl.Username + ";"
 	}
-	if *showPod {
+	if *k8sEnabled {
 		if nacl.Pod == "" {
 			ret += "pod:" + *podDefaultLabel + ";"
 		} else {
@@ -401,18 +401,15 @@ func main() {
 			"recheck process names on each scrape")
 		debug = flag.Bool("debug", false,
 			"log debugging information to stdout")
-		template = flag.String("template", "{{index .Config.Labels \"io.kubernetes.pod.name\"}}",
-			"go template for 'docker inspect --format' command to receive POD names")
 		showVersion = flag.Bool("version", false,
 			"print version information and exit")
 	)
-	showPod = flag.Bool("pod", false,
-		"append 'pod' label to metrics, filled with pod name if process is executed in docker")
+	k8sEnabled = flag.Bool("k8s", false,
+		"append k8s 'pod' label to metrics, filled with pod name if process is executed in kubernetes. Requires curl and jq installed, env vars KUBE_TOKEN and KUBE_URL in format 'http[s]://kubehost:port'")
 	podDefaultLabel = flag.String("pod-default-label", "",
-		"default 'pod' label for processes executed not in docker")
+		"default 'pod' label for processes executed not in kubernetes")
 	showUser = flag.Bool("user", false,
 		"append 'user' label to metrics")
-
 	flag.Parse()
 
 	if *showVersion {
@@ -428,7 +425,7 @@ func main() {
 	// append 'pod' label to descs
 	// See MatchAndName how to add another labels
 	// Don't forget to add all possible labels to map in scrape function
-	if *showPod {
+	if *k8sEnabled {
 		desc.addGroupLabel("pod")
 	}
 
@@ -478,8 +475,8 @@ func main() {
 		matchnamer = namemapper
 	}
 	// add additional resolvers in the same way
-	if *showPod {
-		matchnamer.AddResolver(proc.NewDockerResolver(*debug, *template))
+	if *k8sEnabled {
+		matchnamer.AddResolver(proc.NewK8sResolver(*debug, *procfsPath))
 	}
 
 	pc, err := NewProcessCollector(*procfsPath, *children, *threads, matchnamer, *recheck, *debug)

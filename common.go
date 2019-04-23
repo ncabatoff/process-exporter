@@ -9,7 +9,6 @@ type (
 		Cmdline  []string
 		Username string
 		Pod      string
-		ProcTree map[int]int
 	}
 
 	// Resolver fills any additional fields in ProcAttributes

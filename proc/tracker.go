@@ -32,7 +32,6 @@ type (
 		alwaysRecheck bool
 		username      map[int]string
 		debug         bool
-		procTree      map[int]int
 	}
 
 	// Delta is an alias of Counts used to signal that its contents are not
@@ -149,7 +148,6 @@ func NewTracker(namer common.MatchNamer, trackChildren, trackThreads, alwaysRech
 		alwaysRecheck: alwaysRecheck,
 		username:      make(map[int]string),
 		debug:         debug,
-		procTree:      make(map[int]int),
 	}
 }
 
@@ -292,9 +290,6 @@ func (t *Tracker) update(procs Iter) ([]IDInfo, CollectErrors, error) {
 	var now = time.Now()
 
 	for procs.Next() {
-		if st, err := procs.GetStatic(); err == nil {
-			t.procTree[procs.GetPid()] = st.ParentPid
-		}
 		newProc, cerrs := t.handleProc(procs, now)
 		if newProc != nil {
 			newProcs = append(newProcs, *newProc)
@@ -406,6 +401,7 @@ func (t *Tracker) Update(iter Iter) (CollectErrors, []Update, error) {
 	if err != nil {
 		return colErrs, nil, err
 	}
+
 	// Step 1: track any new proc that should be tracked based on its name and cmdline.
 	untracked := make(map[ID]IDInfo)
 	for _, idinfo := range newProcs {
@@ -414,7 +410,6 @@ func (t *Tracker) Update(iter Iter) (CollectErrors, []Update, error) {
 			Name:     idinfo.Name,
 			Cmdline:  idinfo.Cmdline,
 			Username: t.lookupUid(idinfo.EffectiveUID),
-			ProcTree: t.procTree,
 		}
 		wanted, gname := t.namer.MatchAndName(nacl)
 		if wanted {

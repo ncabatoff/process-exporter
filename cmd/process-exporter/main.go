@@ -233,9 +233,6 @@ var (
 			[]string{"groupname", "threadname", "ctxswitchtype"},
 			nil},
 	}
-	// global variables for now
-	showUser, k8sEnabled *bool
-	podDefaultLabel      *string
 )
 
 type (
@@ -328,46 +325,19 @@ func parseNameMapper(s string) (*nameMapperRegex, error) {
 			}
 		}
 	}
-
 	return &nameMapperRegex{mapper, nil}, nil
-}
-
-// AddResolver implements common.MatchNamer interface
-func (nmr *nameMapperRegex) AddResolver(resolver common.Resolver) {
-	nmr.resolvers = append(nmr.resolvers, resolver)
-}
-
-func (nmr *nameMapperRegex) labels(nacl common.ProcAttributes) string {
-	ret := ""
-	if !*showUser && !*k8sEnabled {
-		return ret
-	}
-	for _, res := range nmr.resolvers {
-		res.Resolve(&nacl)
-	}
-	if *showUser {
-		ret += "user:" + nacl.Username + ";"
-	}
-	if *k8sEnabled {
-		if nacl.Pod == "" {
-			ret += "pod:" + *podDefaultLabel + ";"
-		} else {
-			ret += "pod:" + nacl.Pod + ";"
-		}
-	}
-	return ret
 }
 
 func (nmr *nameMapperRegex) MatchAndName(nacl common.ProcAttributes) (bool, string) {
 	if pregex, ok := nmr.mapping[nacl.Name]; ok {
 		if pregex == nil {
-			return true, nmr.labels(nacl) + nacl.Name
+			return true, nacl.Name
 		}
 		matches := pregex.regex.FindStringSubmatch(strings.Join(nacl.Cmdline, " "))
 		if len(matches) > 1 {
 			for _, matchstr := range matches[1:] {
 				if matchstr != "" {
-					return true, nmr.labels(nacl) + pregex.prefix + matchstr
+					return true, pregex.prefix + matchstr
 				}
 			}
 		}
@@ -403,13 +373,13 @@ func main() {
 			"log debugging information to stdout")
 		showVersion = flag.Bool("version", false,
 			"print version information and exit")
+		k8sEnabled = flag.Bool("k8s", false,
+			"append k8s 'pod' label to metrics, filled with pod name if process is executed in kubernetes. Requires curl and jq installed, env vars configured.")
+		podDefaultLabel = flag.String("pod-default-label", "",
+			"default 'pod' label for processes executed not in kubernetes")
+		showUser = flag.Bool("user", false,
+			"append 'user' label to metrics")
 	)
-	k8sEnabled = flag.Bool("k8s", false,
-		"append k8s 'pod' label to metrics, filled with pod name if process is executed in kubernetes. Requires curl and jq installed, env vars configured.")
-	podDefaultLabel = flag.String("pod-default-label", "",
-		"default 'pod' label for processes executed not in kubernetes")
-	showUser = flag.Bool("user", false,
-		"append 'user' label to metrics")
 	flag.Parse()
 
 	if *showVersion {
@@ -474,12 +444,19 @@ func main() {
 		}
 		matchnamer = namemapper
 	}
-	// add additional resolvers in the same way
-	if *k8sEnabled {
-		matchnamer.AddResolver(proc.NewK8sResolver(*debug, *procfsPath))
+
+	var labeler *common.Labeler
+
+	if *showUser || *k8sEnabled {
+		labeler = common.NewLabeler(*showUser, *k8sEnabled)
 	}
 
-	pc, err := NewProcessCollector(*procfsPath, *children, *threads, matchnamer, *recheck, *debug)
+	// add additional resolvers in the same way
+	if *k8sEnabled {
+		labeler.AddResolver(proc.NewK8sResolver(*debug, *procfsPath, *podDefaultLabel))
+	}
+
+	pc, err := NewProcessCollector(*procfsPath, *children, *threads, matchnamer, *recheck, *debug, labeler)
 	if err != nil {
 		log.Fatalf("Error initializing: %v", err)
 	}
@@ -544,6 +521,7 @@ func NewProcessCollector(
 	n common.MatchNamer,
 	recheck bool,
 	debug bool,
+	l *common.Labeler,
 ) (*NamedProcessCollector, error) {
 	fs, err := proc.NewFS(procfsPath, debug)
 	if err != nil {
@@ -552,7 +530,7 @@ func NewProcessCollector(
 
 	p := &NamedProcessCollector{
 		scrapeChan: make(chan scrapeRequest),
-		Grouper:    proc.NewGrouper(n, children, threads, recheck, debug),
+		Grouper:    proc.NewGrouper(n, children, threads, recheck, debug, l),
 		source:     fs,
 		threads:    threads,
 		debug:      debug,

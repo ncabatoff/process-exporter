@@ -20,6 +20,7 @@ type (
 		pods         map[int]string
 		lastloadtime time.Time
 		procfsPath   string
+		defaultPod   string
 	}
 )
 
@@ -29,7 +30,7 @@ func (r *K8sResolver) String() string {
 }
 
 // NewK8sResolver ...
-func NewK8sResolver(debug bool, procfsPath string) *K8sResolver {
+func NewK8sResolver(debug bool, procfsPath string, defaultPod string) *K8sResolver {
 	out, err := exec.Command("bash", "-c", "curl --version >/dev/null && jq --version >/dev/null && echo 'OK'").CombinedOutput()
 	outstr := strings.TrimSuffix(string(out), "\n")
 	if err != nil || outstr != "OK" {
@@ -82,6 +83,7 @@ func NewK8sResolver(debug bool, procfsPath string) *K8sResolver {
 		debug:      debug,
 		pods:       make(map[int]string),
 		procfsPath: procfsPath,
+		defaultPod: defaultPod,
 	}
 }
 
@@ -100,7 +102,9 @@ func (r *K8sResolver) Resolve(pa *common.ProcAttributes) {
 	r.load()
 	if val, ok := r.pods[pa.Pid]; ok {
 		(*pa).Pod = val
+		return
 	}
+	(*pa).Pod = r.defaultPod
 }
 
 func (r *K8sResolver) load() {

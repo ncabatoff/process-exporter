@@ -352,3 +352,10 @@ Install [dep](https://github.com/golang/dep), then:
 dep ensure
 make
 ```
+
+If you need only binary of process-exporter for your current system, then
+```
+dep ensure
+cd cmd/process-exporter
+go build
+```

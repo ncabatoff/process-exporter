@@ -334,7 +334,7 @@ func parseNameMapper(s string) (*nameMapperRegex, error) {
 
 // AddResolver implements common.MatchNamer interface
 func (nmr *nameMapperRegex) AddResolver(resolver common.Resolver) {
-		nmr.resolvers = append(nmr.resolvers, resolver)
+	nmr.resolvers = append(nmr.resolvers, resolver)
 }
 
 func (nmr *nameMapperRegex) labels(nacl common.ProcAttributes) string {

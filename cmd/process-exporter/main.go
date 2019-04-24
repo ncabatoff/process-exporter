@@ -405,7 +405,7 @@ func main() {
 			"print version information and exit")
 	)
 	k8sEnabled = flag.Bool("k8s", false,
-		"append k8s 'pod' label to metrics, filled with pod name if process is executed in kubernetes. Requires curl and jq installed, env vars KUBE_TOKEN and KUBE_URL in format 'http[s]://kubehost:port'")
+		"append k8s 'pod' label to metrics, filled with pod name if process is executed in kubernetes. Requires curl and jq installed, env vars configured.")
 	podDefaultLabel = flag.String("pod-default-label", "",
 		"default 'pod' label for processes executed not in kubernetes")
 	showUser = flag.Bool("user", false,

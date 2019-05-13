@@ -3,7 +3,7 @@ jobs:
 
   build:
     docker:
-      - image: circleci/golang:1.10.8-stretch
+      - image: circleci/golang:1.12-stretch
     working_directory: /go/src/github.com/ncabatoff/process-exporter
     steps:
       - checkout
@@ -25,7 +25,7 @@ jobs:
 
   release:
     docker:
-      - image: circleci/golang:1.10
+      - image: circleci/golang:1.12
     working_directory: /go/src/github.com/ncabatoff/process-exporter
     steps:
       - checkout

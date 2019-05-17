@@ -23,7 +23,7 @@ Usage:
 or via docker:
 
 ```
-  docker run -d --rm -p 9585:9585 --privileged -v /proc:/host/proc -v `pwd`:/config ncabatoff/process-exporter --procfs /host/proc -config.path /config/filename.yml
+  docker run -d --rm -p 9585:9585 --privileged -v /proc:/host/proc -v `pwd`:/config opvizorpa/process-exporter --procfs /host/proc -config.path /config/filename.yml
 
 ```
 

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"text/template"
 
-	common "github.com/ncabatoff/process-exporter"
+	common "github.com/opvizor/process-exporter"
 	"gopkg.in/yaml.v2"
 )
 
@@ -21,7 +21,8 @@ type (
 	}
 
 	FirstMatcher struct {
-		matchers []common.MatchNamer
+		matchers  []common.MatchNamer
+		resolvers []common.Resolver
 	}
 
 	Config struct {
@@ -50,6 +51,7 @@ type (
 	matchNamer struct {
 		andMatcher
 		templateNamer
+		resolvers []common.Resolver
 	}
 
 	templateParams struct {
@@ -298,5 +300,5 @@ func getMatchNamer(yamlmn interface{}) (common.MatchNamer, error) {
 		return nil, fmt.Errorf("bad name template %q: %v", nametmpl, err)
 	}
 
-	return &matchNamer{matchers, templateNamer{tmpl}}, nil
+	return &matchNamer{matchers, templateNamer{tmpl}, nil}, nil
 }

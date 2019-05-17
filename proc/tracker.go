@@ -8,7 +8,7 @@ import (
 	"time"
 
 	seq "github.com/ncabatoff/go-seq/seq"
-	common "github.com/ncabatoff/process-exporter"
+	common "github.com/opvizor/process-exporter"
 )
 
 type (
@@ -32,6 +32,8 @@ type (
 		alwaysRecheck bool
 		username      map[int]string
 		debug         bool
+		// LabelNamer calls resolvers and adds additional labels to groupname
+		labeler *common.Labeler
 	}
 
 	// Delta is an alias of Counts used to signal that its contents are not
@@ -138,7 +140,7 @@ func (tp *trackedProc) getUpdate() Update {
 }
 
 // NewTracker creates a Tracker.
-func NewTracker(namer common.MatchNamer, trackChildren, trackThreads, alwaysRecheck, debug bool) *Tracker {
+func NewTracker(namer common.MatchNamer, trackChildren, trackThreads, alwaysRecheck, debug bool, labeler *common.Labeler) *Tracker {
 	return &Tracker{
 		namer:         namer,
 		tracked:       make(map[ID]*trackedProc),
@@ -148,6 +150,7 @@ func NewTracker(namer common.MatchNamer, trackChildren, trackThreads, alwaysRech
 		alwaysRecheck: alwaysRecheck,
 		username:      make(map[int]string),
 		debug:         debug,
+		labeler:       labeler,
 	}
 }
 
@@ -406,12 +409,14 @@ func (t *Tracker) Update(iter Iter) (CollectErrors, []Update, error) {
 	untracked := make(map[ID]IDInfo)
 	for _, idinfo := range newProcs {
 		nacl := common.ProcAttributes{
+			Pid:      idinfo.GetPid(),
 			Name:     idinfo.Name,
 			Cmdline:  idinfo.Cmdline,
 			Username: t.lookupUid(idinfo.EffectiveUID),
 		}
 		wanted, gname := t.namer.MatchAndName(nacl)
 		if wanted {
+			gname := t.labeler.GetLabels(nacl) + gname
 			if t.debug {
 				log.Printf("matched as %q: %+v", gname, idinfo)
 			}

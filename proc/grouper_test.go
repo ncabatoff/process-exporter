@@ -73,7 +73,7 @@ func TestGrouperBasic(t *testing.T) {
 		},
 	}
 
-	gr := NewGrouper(newNamer(n1, n2), false, false, false, false)
+	gr := NewGrouper(newNamer(n1, n2), false, false, false, false, nil)
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.procs...))
 		if diff := cmp.Diff(got, tc.want); diff != "" {
@@ -128,7 +128,7 @@ func TestGrouperProcJoin(t *testing.T) {
 		},
 	}
 
-	gr := NewGrouper(newNamer(n1), false, false, false, false)
+	gr := NewGrouper(newNamer(n1), false, false, false, false, nil)
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.procs...))
 		if diff := cmp.Diff(got, tc.want); diff != "" {
@@ -171,7 +171,7 @@ func TestGrouperNonDecreasing(t *testing.T) {
 		},
 	}
 
-	gr := NewGrouper(newNamer(n1), false, false, false, false)
+	gr := NewGrouper(newNamer(n1), false, false, false, false, nil)
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.procs...))
 		if diff := cmp.Diff(got, tc.want); diff != "" {
@@ -224,7 +224,7 @@ func TestGrouperThreads(t *testing.T) {
 	}
 
 	opts := cmpopts.SortSlices(lessThreads)
-	gr := NewGrouper(newNamer(n), false, true, false, false)
+	gr := NewGrouper(newNamer(n), false, true, false, false, nil)
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.proc))
 		if diff := cmp.Diff(got, tc.want, opts); diff != "" {

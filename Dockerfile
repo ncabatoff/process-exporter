@@ -18,4 +18,4 @@ COPY --from=build /go/src/github.com/ncabatoff/process-exporter/process-exporter
 ENTRYPOINT ["/bin/process-exporter"]
 
 # Document that the service listens on port 9256.
-EXPOSE 9256
+EXPOSE 9584

@@ -1,11 +1,8 @@
 # process-exporter
 Prometheus exporter that mines /proc to report on selected processes.
 
-[release]: https://github.com/ncabatoff/process-exporter/releases/latest
+[release]: https://github.com/opvizor/process-exporter/releases/latest
 
-[![Release](https://img.shields.io/github/release/ncabatoff/process-exporter.svg?style=flat-square")][release]
-[![Powered By: GoReleaser](https://img.shields.io/badge/powered%20by-goreleaser-green.svg?branch=master)](https://github.com/goreleaser)
-[![CircleCI](https://circleci.com/gh/ncabatoff/process-exporter.svg?style=shield)](https://circleci.com/gh/ncabatoff/process-exporter)
 Some apps are impractical to instrument directly, either because you
 don't control the code or they're written in a language that isn't easy to
 instrument with Prometheus.  We must instead resort to mining /proc.
@@ -13,7 +10,7 @@ instrument with Prometheus.  We must instead resort to mining /proc.
 ## Installation
 
 Either grab a package for your OS from the [Releases][release] page, or
-install via [docker](https://hub.docker.com/r/ncabatoff/process-exporter/).
+install via [docker](https://hub.docker.com/r/opvizorpa/process-exporter/).
 
 ## Running
 
@@ -26,7 +23,7 @@ Usage:
 or via docker:
 
 ```
-  docker run -d --rm -p 9256:9256 --privileged -v /proc:/host/proc -v `pwd`:/config ncabatoff/process-exporter --procfs /host/proc -config.path /config/filename.yml
+  docker run -d --rm -p 9585:9585 --privileged -v /proc:/host/proc -v `pwd`:/config opvizorpa/process-exporter --procfs /host/proc -config.path /config/filename.yml
 
 ```
 

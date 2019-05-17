@@ -10,7 +10,7 @@ import (
 	"strings"
 	"text/template"
 
-	common "github.com/ncabatoff/process-exporter"
+	common "github.com/opvizor/process-exporter"
 	"gopkg.in/yaml.v2"
 )
 
@@ -302,4 +302,3 @@ func getMatchNamer(yamlmn interface{}) (common.MatchNamer, error) {
 
 	return &matchNamer{matchers, templateNamer{tmpl}, nil}, nil
 }
-

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	seq "github.com/ncabatoff/go-seq/seq"
-	common "github.com/ncabatoff/process-exporter"
+	common "github.com/opvizor/process-exporter"
 )
 
 type (

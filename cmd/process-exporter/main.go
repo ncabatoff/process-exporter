@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/ncabatoff/fakescraper"
-	common "github.com/ncabatoff/process-exporter"
-	"github.com/ncabatoff/process-exporter/config"
-	"github.com/ncabatoff/process-exporter/proc"
+	common "github.com/opvizor/process-exporter"
+	"github.com/opvizor/process-exporter/config"
+	"github.com/opvizor/process-exporter/proc"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

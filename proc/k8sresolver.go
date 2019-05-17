@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	common "github.com/ncabatoff/process-exporter"
+	common "github.com/opvizor/process-exporter"
 )
 
 type (

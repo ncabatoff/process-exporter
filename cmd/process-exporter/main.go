@@ -347,7 +347,7 @@ func (nmr *nameMapperRegex) MatchAndName(nacl common.ProcAttributes) (bool, stri
 
 func main() {
 	var (
-		listenAddress = flag.String("web.listen-address", ":9256",
+		listenAddress = flag.String("web.listen-address", ":9585",
 			"Address on which to expose metrics and web interface.")
 		metricsPath = flag.String("web.telemetry-path", "/metrics",
 			"Path under which to expose metrics.")

@@ -15,9 +15,9 @@ archive:
   name_template: "process-exporter-{{ .Version }}.{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
   wrap_in_directory: true
 nfpm:
-  homepage: https://github.com/ncabatoff/process-exporter
-  maintainer: nick.cabatoff+procexp@gmail.com
-  description: Prometheus exporter to report on processes running
+  homepage: https://github.com/opvizor/process-exporter
+  maintainer: info@opvizor.com
+  description: Prometheus exporter to report on processes running - forked from https://github.com/ncabatoff/process-exporter
   license: MIT
   formats:
     - deb
@@ -33,7 +33,8 @@ nfpm:
     preremove: "packaging/scripts/preremove.sh"
 release:
   github:
-    owner: ncabatoff
+    fork: https://github.com/ncabatoff/process-exporter
+    fork-owner: opvizor
     name: process-exporter
   draft: false
   prerelease: true

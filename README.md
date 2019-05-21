@@ -346,6 +346,7 @@ An example Grafana dashboard to view the metrics is available at https://grafana
 
 ## Building
 
+Requires Go 1.12 installed.
 ```
 make
 ```

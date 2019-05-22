@@ -51,9 +51,9 @@ docker:
 	docker run --rm --volumes-from configs "$(DOCKER_IMAGE_NAME):$(TAG_VERSION)" $(SMOKE_TEST)
 
 dockertest:
-	docker run --rm -it -v `pwd`:/go/src/github.com/ncabatoff/process-exporter golang:1.10  make -C /go/src/github.com/ncabatoff/process-exporter test
+	docker run --rm -it -v `pwd`:/go/src/github.com/ncabatoff/process-exporter golang:1.12  make -C /go/src/github.com/ncabatoff/process-exporter test
 
 dockerinteg:
-	docker run --rm -it -v `pwd`:/go/src/github.com/ncabatoff/process-exporter golang:1.10  make -C /go/src/github.com/ncabatoff/process-exporter build integ
+	docker run --rm -it -v `pwd`:/go/src/github.com/ncabatoff/process-exporter golang:1.12  make -C /go/src/github.com/ncabatoff/process-exporter build integ
 
 .PHONY: all style format test vet build integ docker

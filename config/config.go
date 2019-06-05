@@ -174,11 +174,77 @@ func (m andMatcher) Match(nacl common.ProcAttributes) bool {
 	return true
 }
 
+// getProcessNames extracts teh anmes of the processes from the given procname
+func getProcessNames(procname interface{}) []string {
+	nm, ok := procname.(map[interface{}]interface{})
+	if !ok {
+		return nil
+	}
+
+	var names []string
+	//check for 'name' field. If contains name field other fields are not extracted
+	for k, v := range nm {
+		key, ok := k.(string)
+		if !ok {
+			return nil
+		}
+		if key == "name" {
+			value, ok := v.(string)
+			if !ok {
+				return nil
+			}
+			names = append(names, value)
+			return names
+		}
+	}
+
+	for k, v := range nm {
+		key, ok := k.(string)
+		if !ok {
+			return nil
+		}
+
+		if key == "comm" {
+			// "comm" block in config file - extract values as is from array
+			values, ok := v.([]interface{})
+			if !ok {
+				return nil
+			}
+			for _, rawValue := range values {
+				value, ok := rawValue.(string)
+				if !ok {
+					return nil
+				}
+				names = append(names, value)
+			}
+		} else if key == "exe" {
+			// "exe" block in config file - extracts names from array
+			exes, ok := v.([]interface{})
+			if !ok {
+				return nil
+			}
+			for _, rawValue := range exes {
+				value, ok := rawValue.(string)
+				if !ok {
+					return nil
+				}
+				// check for forward slash - need to extract filename if "/" is present
+				if strings.Contains(value, "/") {
+					names = append(names, filepath.Base(value))
+				} else {
+					names = append(names, value)
+				}
+			}
+		}
+	}
+	return names
+}
+
 // ReadRecipesFile opens the named file and extracts recipes from it.
-func ReadFile(cfgpath string, debug bool) (*Config, error) {
+func ReadFile(cfgpath string, debug bool) (*Config, *[]string, error) {
 	content, err := ioutil.ReadFile(cfgpath)
 	if err != nil {
-		return nil, fmt.Errorf("error reading config file %q: %v", cfgpath, err)
+		return nil, nil, fmt.Errorf("error reading config file %q: %v", cfgpath, err)
 	}
 	if debug {
 		log.Printf("Config file %q contents:\n%s", cfgpath, content)
@@ -187,32 +253,37 @@ func ReadFile(cfgpath string, debug bool) (*Config, error) {
 }
 
 // GetConfig extracts Config from content by parsing it as YAML.
-func GetConfig(content string, debug bool) (*Config, error) {
+func GetConfig(content string, debug bool) (*Config, *[]string, error) {
 	var yamldata map[string]interface{}
 
 	err := yaml.Unmarshal([]byte(content), &yamldata)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	yamlProcnames, ok := yamldata["process_names"]
 	if !ok {
-		return nil, fmt.Errorf("error parsing YAML config: no top-level 'process_names' key")
+		return nil, nil, fmt.Errorf("error parsing YAML config: no top-level 'process_names' key")
 	}
 	procnames, ok := yamlProcnames.([]interface{})
 	if !ok {
-		return nil, fmt.Errorf("error parsing YAML config: 'process_names' is not a list")
+		return nil, nil, fmt.Errorf("error parsing YAML config: 'process_names' is not a list")
 	}
 
 	var cfg Config
+	var processNames []string
 	for i, procname := range procnames {
 		mn, err := getMatchNamer(procname)
 		if err != nil {
-			return nil, fmt.Errorf("unable to parse process_name entry %d: %v", i, err)
+			return nil, nil, fmt.Errorf("unable to parse process_name entry %d: %v", i, err)
 		}
 		cfg.MatchNamers.matchers = append(cfg.MatchNamers.matchers, mn)
+
+		// get names of all processes
+		pNames := getProcessNames(procname)
+		processNames = append(processNames, pNames...)
 	}
 
-	return &cfg, nil
+	return &cfg, &processNames, nil
 }
 
 func getMatchNamer(yamlmn interface{}) (common.MatchNamer, error) {

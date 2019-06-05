@@ -303,6 +303,7 @@ func main() {
 			"log debugging information to stdout")
 		showVersion = flag.Bool("version", false,
 			"print version information and exit")
+		reportMissing = flag.Bool("report.missing", false, "report a stopped process as having zero processes running when process exporter is first started")
 	)
 	flag.Parse()
 
@@ -317,13 +318,15 @@ func main() {
 	}
 
 	var matchnamer common.MatchNamer
+	var processNames *[]string
 
 	if *configPath != "" {
 		if *nameMapping != "" || *procNames != "" {
 			log.Fatalf("-config.path cannot be used with -namemapping or -procnames")
 		}
 
-		cfg, err := config.ReadFile(*configPath, *debug)
+		cfg, pNames, err := config.ReadFile(*configPath, *debug)
+		processNames = pNames
 		if err != nil {
 			log.Fatalf("error reading config file %q: %v", *configPath, err)
 		}
@@ -355,7 +358,7 @@ func main() {
 		matchnamer = namemapper
 	}
 
-	pc, err := NewProcessCollector(*procfsPath, *children, *threads, matchnamer, *recheck, *debug)
+	pc, err := NewProcessCollector(*procfsPath, *children, *threads, matchnamer, *recheck, *debug, *processNames, *reportMissing)
 	if err != nil {
 		log.Fatalf("Error initializing: %v", err)
 	}
@@ -404,6 +407,8 @@ type (
 		scrapeProcReadErrors int
 		scrapePartialErrors  int
 		debug                bool
+		processNames         []string
+		reportMissing        bool
 	}
 )
 
@@ -414,17 +419,21 @@ func NewProcessCollector(
 	n common.MatchNamer,
 	recheck bool,
 	debug bool,
+	processNames []string,
+	reportMissing bool,
 ) (*NamedProcessCollector, error) {
 	fs, err := proc.NewFS(procfsPath, debug)
 	if err != nil {
 		return nil, err
 	}
 	p := &NamedProcessCollector{
-		scrapeChan: make(chan scrapeRequest),
-		Grouper:    proc.NewGrouper(n, children, threads, recheck, debug),
-		source:     fs,
-		threads:    threads,
-		debug:      debug,
+		scrapeChan:    make(chan scrapeRequest),
+		Grouper:       proc.NewGrouper(n, children, threads, recheck, debug),
+		source:        fs,
+		threads:       threads,
+		debug:         debug,
+		processNames:  processNames,
+		reportMissing: reportMissing,
 	}
 
 	colErrs, _, err := p.Update(p.source.AllProcs())
@@ -491,6 +500,17 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 		p.scrapeErrors++
 		log.Printf("error reading procs: %v", err)
 	} else {
+		if p.reportMissing {
+			// loop over all process names, if process does not have process running (in groups) then report num_procs as zero
+			for _, pName := range p.processNames {
+				_, present := groups[pName]
+				if !present {
+					ch <- prometheus.MustNewConstMetric(numprocsDesc,
+						prometheus.GaugeValue, float64(0), pName)
+				}
+			}
+		}
+
 		for gname, gcounts := range groups {
 			ch <- prometheus.MustNewConstMetric(numprocsDesc,
 				prometheus.GaugeValue, float64(gcounts.Procs), gname)

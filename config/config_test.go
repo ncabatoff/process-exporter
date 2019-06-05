@@ -16,7 +16,7 @@ process_names:
   - exe: 
     - /bin/ksh
 `
-	cfg, err := GetConfig(yml, false)
+	cfg, _, err := GetConfig(yml, false)
 	c.Assert(err, IsNil)
 	c.Check(cfg.MatchNamers.matchers, HasLen, 3)
 
@@ -61,7 +61,7 @@ process_names:
     - prometheus
     name: "{{.ExeFull}}"
 `
-	cfg, err := GetConfig(yml, false)
+	cfg, _, err := GetConfig(yml, false)
 	c.Assert(err, IsNil)
 	c.Check(cfg.MatchNamers.matchers, HasLen, 2)
 
@@ -74,4 +74,25 @@ process_names:
 	found, name = cfg.MatchNamers.matchers[1].MatchAndName(pm)
 	c.Check(found, Equals, true)
 	c.Check(name, Equals, "/usr/local/bin/prometheus")
+}
+
+func (s MySuite) TestReportMissingFeature(c *C) {
+	yml := `
+process_names:
+  - comm:
+    - prometheus
+    - grafana
+  - exe:
+    - postmaster
+    - anotherExe
+    cmdline:
+    - "-a -b --verbose"
+  - exe:
+    - yetAnotherExe
+    name: "named_exe"
+  `
+
+	_, processNames, err := GetConfig(yml, false)
+	c.Assert(err, IsNil)
+	c.Check(*processNames, DeepEquals, []string{"prometheus", "grafana", "postmaster", "anotherExe", "named_exe"})
 }

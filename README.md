@@ -6,6 +6,7 @@ Prometheus exporter that mines /proc to report on selected processes.
 [![Release](https://img.shields.io/github/release/ncabatoff/process-exporter.svg?style=flat-square")][release]
 [![Powered By: GoReleaser](https://img.shields.io/badge/powered%20by-goreleaser-green.svg?branch=master)](https://github.com/goreleaser)
 [![CircleCI](https://circleci.com/gh/ncabatoff/process-exporter.svg?style=shield)](https://circleci.com/gh/ncabatoff/process-exporter)
+
 Some apps are impractical to instrument directly, either because you
 don't control the code or they're written in a language that isn't easy to
 instrument with Prometheus.  We must instead resort to mining /proc.
@@ -49,6 +50,11 @@ it's assumed its proper name.
 
 -procnames is intended as a quick alternative to using a config file.  Details
 in the following section.
+
+-report.missing will report any processes that are not running the process-exporter
+is started as having "num_procs" of zero. You need to use a config file for this to
+work. It will use the "name" field first and if this is not defined it extracts the
+process names from the "comm" and "exe" arrays.
 
 ## Configuration and group naming
 

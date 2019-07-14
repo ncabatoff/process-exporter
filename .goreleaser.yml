@@ -11,6 +11,9 @@ builds:
       - arm64
       - ppc64
       - ppc64le
+    goarm:
+      - 6
+      - 7
 archive:
   name_template: "process-exporter-{{ .Version }}.{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
   wrap_in_directory: true

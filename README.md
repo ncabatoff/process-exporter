@@ -38,7 +38,7 @@ walking the process tree upwards.  In other words, resource usage of
 subprocesses is added to their parent's usage unless the subprocess identifies
 as a different group name.
 
--threads (default:false) means that metrics will be broken down by thread name
+-threads (default:true) means that metrics will be broken down by thread name
 as well as group name.
 
 -recheck (default:false) means that on each scrape the process names are
@@ -293,8 +293,8 @@ The extra label `state` can have these values: `Running`, `Sleeping`, `Waiting`,
 
 ## Group Thread Metrics
 
-Since publishing thread metrics adds a lot of overhead, these metrics are disabled
-by default.  Use the -threads command-line argument to enable them.
+Since publishing thread metrics adds a lot of overhead, use the `-threads` command-line argument to disable them, 
+if necessary.
 
 All these metrics start with `namedprocess_namegroup_` and have at minimum
 the labels `groupname` and `threadname`.  `threadname` is field comm(2) from

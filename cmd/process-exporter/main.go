@@ -291,7 +291,7 @@ func main() {
 			"comma-separated list, alternating process name and capturing regex to apply to cmdline")
 		children = flag.Bool("children", true,
 			"if a proc is tracked, track with it any children that aren't part of their own group")
-		threads = flag.Bool("threads", true,
+		threads = flag.Bool("threads", false,
 			"report on per-threadname metrics as well")
 		man = flag.Bool("man", false,
 			"print manual")

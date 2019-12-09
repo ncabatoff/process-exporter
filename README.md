@@ -243,7 +243,7 @@ and nonvoluntary_ctxt_switches.  The extra label `ctxswitchtype` can have two va
 
 ### memory_bytes gauge
 
-Number of bytes of memory used.  The extra label `memtype` can have two values:
+Number of bytes of memory used.  The extra label `memtype` can have three values:
 
 *resident*: Field rss(24) from /proc/[pid]/stat, whose doc says:
 

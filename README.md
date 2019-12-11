@@ -1,7 +1,7 @@
 # process-exporter
 This is project is based on ncabatoff/process-exporter repository (https://github.com/ncabatoff/process-exporter)
 
-The main reason for this fork exists a 'report missing' feature not merged on the original repository (https://github.com/ncabatoff/process-exporter/pull/103)
+The main reason for this fork exists is a 'report missing' feature not merged on the original repository (https://github.com/ncabatoff/process-exporter/pull/103)
 
 We call this 'chupacabra fork' in Brazil
 

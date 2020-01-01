@@ -102,6 +102,14 @@ Template variables available:
 - `{{.ExeFull}}` contains the fully qualified path of the executable
 - `{{.Username}}` contains the username of the effective user
 - `{{.Matches}}` map contains all the matches resulting from applying cmdline regexps
+- `{{.PID}}` contains the PID of the process.  Note that using PID means the group
+  will only contain a single process.
+- `{{.StartTime}}` contains the start time of the process.  This can be useful
+  in conjunction with PID because PIDs get reused over time.
+
+Using `PID` or `StartTime` is discouraged: this is almost never what you want,
+and is likely to result in high cardinality metrics which Prometheus will have
+trouble with.
 
 #### Using a config file: process selectors
 

@@ -50,6 +50,8 @@ it's assumed its proper name.
 -procnames is intended as a quick alternative to using a config file.  Details
 in the following section.
 
+To disable any of these options, use the `-option=false`.
+
 ## Configuration and group naming
 
 To select and group the processes to monitor, either provide command-line

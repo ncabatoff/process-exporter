@@ -406,9 +406,11 @@ func (t *Tracker) Update(iter Iter) (CollectErrors, []Update, error) {
 	untracked := make(map[ID]IDInfo)
 	for _, idinfo := range newProcs {
 		nacl := common.ProcAttributes{
-			Name:     idinfo.Name,
-			Cmdline:  idinfo.Cmdline,
-			Username: t.lookupUid(idinfo.EffectiveUID),
+			Name:      idinfo.Name,
+			Cmdline:   idinfo.Cmdline,
+			Username:  t.lookupUid(idinfo.EffectiveUID),
+			PID:       idinfo.Pid,
+			StartTime: idinfo.StartTime,
 		}
 		wanted, gname := t.namer.MatchAndName(nacl)
 		if wanted {

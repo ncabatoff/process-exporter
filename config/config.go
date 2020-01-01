@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+	"time"
 
 	common "github.com/ncabatoff/process-exporter"
 	"gopkg.in/yaml.v2"
@@ -53,11 +54,13 @@ type (
 	}
 
 	templateParams struct {
-		Comm     string
-		ExeBase  string
-		ExeFull  string
-		Username string
-		Matches  map[string]string
+		Comm      string
+		ExeBase   string
+		ExeFull   string
+		Username  string
+		PID       int
+		StartTime time.Time
+		Matches   map[string]string
 	}
 )
 
@@ -117,11 +120,13 @@ func (m *matchNamer) MatchAndName(nacl common.ProcAttributes) (bool, string) {
 
 	var buf bytes.Buffer
 	m.template.Execute(&buf, &templateParams{
-		Comm:     nacl.Name,
-		ExeBase:  exebase,
-		ExeFull:  exefull,
-		Matches:  matches,
-		Username: nacl.Username,
+		Comm:      nacl.Name,
+		ExeBase:   exebase,
+		ExeFull:   exefull,
+		Matches:   matches,
+		Username:  nacl.Username,
+		PID:       nacl.PID,
+		StartTime: nacl.StartTime,
 	})
 	return true, buf.String()
 }

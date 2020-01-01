@@ -4,6 +4,7 @@ import (
 	// "github.com/kylelemons/godebug/pretty"
 	common "github.com/ncabatoff/process-exporter"
 	. "gopkg.in/check.v1"
+	"time"
 )
 
 func (s MySuite) TestConfigBasic(c *C) {
@@ -59,19 +60,36 @@ process_names:
     name: "{{.ExeBase}}:{{.Matches.Path}}"
   - exe: 
     - prometheus
-    name: "{{.ExeFull}}"
+    name: "{{.ExeFull}}:{{.PID}}"
+  - comm:
+    - cat
+    name: "{{.StartTime}}"
 `
 	cfg, err := GetConfig(yml, false)
 	c.Assert(err, IsNil)
-	c.Check(cfg.MatchNamers.matchers, HasLen, 2)
+	c.Check(cfg.MatchNamers.matchers, HasLen, 3)
 
 	postgres := common.ProcAttributes{Name: "postmaster", Cmdline: []string{"/usr/bin/postmaster", "-D", "/data/pg"}}
 	found, name := cfg.MatchNamers.matchers[0].MatchAndName(postgres)
 	c.Check(found, Equals, true)
 	c.Check(name, Equals, "postmaster:pg")
 
-	pm := common.ProcAttributes{Name: "prometheus", Cmdline: []string{"/usr/local/bin/prometheus"}}
+	pm := common.ProcAttributes{
+		Name:    "prometheus",
+		Cmdline: []string{"/usr/local/bin/prometheus"},
+		PID:     23,
+	}
 	found, name = cfg.MatchNamers.matchers[1].MatchAndName(pm)
 	c.Check(found, Equals, true)
-	c.Check(name, Equals, "/usr/local/bin/prometheus")
+	c.Check(name, Equals, "/usr/local/bin/prometheus:23")
+
+	now := time.Now()
+	cat := common.ProcAttributes{
+		Name:      "cat",
+		Cmdline:   []string{"/bin/cat"},
+		StartTime: now,
+	}
+	found, name = cfg.MatchNamers.matchers[2].MatchAndName(cat)
+	c.Check(found, Equals, true)
+	c.Check(name, Equals, now.String())
 }

@@ -1,0 +1,1 @@
+OPTIONS="--config.path /etc/process-exporter/all.yaml --web.listen-address=:9256"

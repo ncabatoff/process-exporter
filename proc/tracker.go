@@ -23,6 +23,9 @@ type (
 		// procIds is a map from pid to ProcId.  This is a convenience
 		// to allow finding the Tracked entry of a parent process.
 		procIds map[int]ID
+		// firstUpdateAt is the time the first update was run. It allows to
+		// count first usage of a process started between to Update()
+		firstUpdateAt time.Time
 		// trackChildren makes Tracker track descendants of procs the
 		// namer wanted tracked.
 		trackChildren bool
@@ -164,6 +167,13 @@ func (t *Tracker) track(groupName string, idinfo IDInfo) {
 				thr.ThreadName, thr.Counts, Delta{}, time.Time{}, thr.Wchan}
 		}
 	}
+
+	// If the process started while Tracker was running, all current counter happened
+	// between the last Update() and the current Update() and should be counted.
+	if idinfo.StartTime.After(t.firstUpdateAt) {
+		tproc.lastaccum = Delta(tproc.metrics.Counts)
+	}
+
 	t.tracked[idinfo.ID] = &tproc
 }
 
@@ -397,6 +407,10 @@ func (t *Tracker) lookupUid(uid int) string {
 // its metrics for existing tracked procs.  Returns nonfatal errors
 // and the status of all tracked procs, or an error if fatal.
 func (t *Tracker) Update(iter Iter) (CollectErrors, []Update, error) {
+	if t.firstUpdateAt.IsZero() {
+		t.firstUpdateAt = time.Now()
+	}
+
 	newProcs, colErrs, err := t.update(iter)
 	if err != nil {
 		return colErrs, nil, err

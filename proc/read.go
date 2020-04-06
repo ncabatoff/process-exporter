@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ncabatoff/procfs"
+	"github.com/prometheus/procfs"
 )
 
 // ErrProcNotExist indicates a process couldn't be read because it doesn't exist,
@@ -333,7 +333,7 @@ func (p *proccache) getWchan() (string, error) {
 
 func (p *proccache) getIo() (procfs.ProcIO, error) {
 	if p.io == nil {
-		io, err := p.Proc.NewIO()
+		io, err := p.Proc.IO()
 		if err != nil {
 			return procfs.ProcIO{}, err
 		}
@@ -364,12 +364,17 @@ func (p *proccache) GetStatic() (Static, error) {
 		return Static{}, err
 	}
 
+	effectiveUID, err := strconv.ParseInt(status.UIDs[1], 10, 64)
+	if err != nil {
+		return Static{}, err
+	}
+
 	return Static{
 		Name:         stat.Comm,
 		Cmdline:      cmdline,
 		ParentPid:    stat.PPID,
 		StartTime:    startTime,
-		EffectiveUID: status.UIDEffective,
+		EffectiveUID: int(effectiveUID),
 	}, nil
 }
 
@@ -403,7 +408,7 @@ func (p proc) GetCounts() (Counts, int, error) {
 		MajorPageFaults:       uint64(stat.MajFlt),
 		MinorPageFaults:       uint64(stat.MinFlt),
 		CtxSwitchVoluntary:    uint64(status.VoluntaryCtxtSwitches),
-		CtxSwitchNonvoluntary: uint64(status.NonvoluntaryCtxtSwitches),
+		CtxSwitchNonvoluntary: uint64(status.NonVoluntaryCtxtSwitches),
 	}, softerrors, nil
 }
 
@@ -474,7 +479,7 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 		Memory: Memory{
 			ResidentBytes: uint64(stat.ResidentMemory()),
 			VirtualBytes:  uint64(stat.VirtualMemory()),
-			VmSwapBytes:   uint64(status.VmSwapKB * 1024),
+			VmSwapBytes:   uint64(status.VmSwap),
 		},
 		Filedesc: Filedesc{
 			Open:  int64(numfds),

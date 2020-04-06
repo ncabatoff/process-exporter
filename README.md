@@ -263,6 +263,15 @@ Number of bytes of memory used.  The extra label `memtype` can have three values
 
 *swapped*: Field VmSwap from /proc/[pid]/status, translated from KB to bytes.
 
+If gathering smaps file is enabled, two additional values for `memtype` are added:
+
+*proportionalResident*: Sum of "Pss" fields from /proc/[pid]/smaps, whose doc says:
+
+> The "proportional set size" (PSS) of a process is the count of pages it has
+> in memory, where each page is divided by the number of processes sharing it.
+
+*proportionalSwapped*: Sum of "SwapPss" fields from /proc/[pid]/smaps
+
 ### open_filedesc gauge
 
 Number of file descriptors, based on counting how many entries are in the directory

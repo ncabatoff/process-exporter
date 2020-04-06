@@ -293,6 +293,8 @@ func main() {
 			"if a proc is tracked, track with it any children that aren't part of their own group")
 		threads = flag.Bool("threads", true,
 			"report on per-threadname metrics as well")
+		smaps = flag.Bool("gather-smaps", false,
+			"gather metrics from smaps file, which contains proportional resident memory size")
 		man = flag.Bool("man", false,
 			"print manual")
 		configPath = flag.String("config.path", "",
@@ -355,7 +357,7 @@ func main() {
 		matchnamer = namemapper
 	}
 
-	pc, err := NewProcessCollector(*procfsPath, *children, *threads, matchnamer, *recheck, *debug)
+	pc, err := NewProcessCollector(*procfsPath, *children, *threads, *smaps, matchnamer, *recheck, *debug)
 	if err != nil {
 		log.Fatalf("Error initializing: %v", err)
 	}
@@ -399,6 +401,7 @@ type (
 		scrapeChan chan scrapeRequest
 		*proc.Grouper
 		threads              bool
+		smaps                bool
 		source               proc.Source
 		scrapeErrors         int
 		scrapeProcReadErrors int
@@ -411,6 +414,7 @@ func NewProcessCollector(
 	procfsPath string,
 	children bool,
 	threads bool,
+	smaps bool,
 	n common.MatchNamer,
 	recheck bool,
 	debug bool,
@@ -419,11 +423,14 @@ func NewProcessCollector(
 	if err != nil {
 		return nil, err
 	}
+
+	fs.GatherSMaps = smaps
 	p := &NamedProcessCollector{
 		scrapeChan: make(chan scrapeRequest),
 		Grouper:    proc.NewGrouper(n, children, threads, recheck, debug),
 		source:     fs,
 		threads:    threads,
+		smaps:      smaps,
 		debug:      debug,
 	}
 
@@ -538,6 +545,13 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 			for wchan, count := range gcounts.Wchans {
 				ch <- prometheus.MustNewConstMetric(threadWchanDesc,
 					prometheus.GaugeValue, float64(count), gname, wchan)
+			}
+
+			if p.smaps {
+				ch <- prometheus.MustNewConstMetric(membytesDesc,
+					prometheus.GaugeValue, float64(gcounts.Memory.ProportionalBytes), gname, "proportionalResident")
+				ch <- prometheus.MustNewConstMetric(membytesDesc,
+					prometheus.GaugeValue, float64(gcounts.Memory.ProportionalSwapBytes), gname, "proportionalSwapped")
 			}
 
 			if p.threads {

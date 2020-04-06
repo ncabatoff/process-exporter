@@ -49,9 +49,11 @@ type (
 
 	// Memory describes a proc's memory usage.
 	Memory struct {
-		ResidentBytes uint64
-		VirtualBytes  uint64
-		VmSwapBytes   uint64
+		ResidentBytes         uint64
+		VirtualBytes          uint64
+		VmSwapBytes           uint64
+		ProportionalBytes     uint64
+		ProportionalSwapBytes uint64
 	}
 
 	// Filedesc describes a proc's file descriptor usage and soft limit.
@@ -187,9 +189,10 @@ type (
 	// FS implements Source.
 	FS struct {
 		procfs.FS
-		BootTime   uint64
-		MountPoint string
-		debug      bool
+		BootTime    uint64
+		MountPoint  string
+		GatherSMaps bool
+		debug       bool
 	}
 )
 
@@ -474,13 +477,25 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 		softerrors |= 1
 	}
 
+	memory := Memory{
+		ResidentBytes: uint64(stat.ResidentMemory()),
+		VirtualBytes:  uint64(stat.VirtualMemory()),
+		VmSwapBytes:   uint64(status.VmSwap),
+	}
+
+	if p.proccache.fs.GatherSMaps {
+		smaps, err := p.Proc.ProcSMapsRollup()
+		if err != nil {
+			softerrors |= 1
+		} else {
+			memory.ProportionalBytes = smaps.Pss
+			memory.ProportionalSwapBytes = smaps.SwapPss
+		}
+	}
+
 	return Metrics{
 		Counts: counts,
-		Memory: Memory{
-			ResidentBytes: uint64(stat.ResidentMemory()),
-			VirtualBytes:  uint64(stat.VirtualMemory()),
-			VmSwapBytes:   uint64(status.VmSwap),
-		},
+		Memory: memory,
 		Filedesc: Filedesc{
 			Open:  int64(numfds),
 			Limit: uint64(limits.OpenFiles),
@@ -554,7 +569,7 @@ func NewFS(mountPoint string, debug bool) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FS{fs, stat.BootTime, mountPoint, debug}, nil
+	return &FS{fs, stat.BootTime, mountPoint, false, debug}, nil
 }
 
 func (fs *FS) threadFs(pid int) (*FS, error) {
@@ -563,7 +578,7 @@ func (fs *FS) threadFs(pid int) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FS{tfs, fs.BootTime, mountPoint, false}, nil
+	return &FS{tfs, fs.BootTime, mountPoint, fs.GatherSMaps, false}, nil
 }
 
 // AllProcs implements Source.

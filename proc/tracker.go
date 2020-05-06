@@ -24,7 +24,7 @@ type (
 		// to allow finding the Tracked entry of a parent process.
 		procIds map[int]ID
 		// firstUpdateAt is the time the first update was run. It allows to
-		// count first usage of a process started between to Update()
+		// count first usage of a process started between two Update() calls
 		firstUpdateAt time.Time
 		// trackChildren makes Tracker track descendants of procs the
 		// namer wanted tracked.

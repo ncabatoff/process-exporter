@@ -293,7 +293,7 @@ func main() {
 			"if a proc is tracked, track with it any children that aren't part of their own group")
 		threads = flag.Bool("threads", true,
 			"report on per-threadname metrics as well")
-		smaps = flag.Bool("gather-smaps", false,
+		smaps = flag.Bool("gather-smaps", true,
 			"gather metrics from smaps file, which contains proportional resident memory size")
 		man = flag.Bool("man", false,
 			"print manual")

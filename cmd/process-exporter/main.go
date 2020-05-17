@@ -357,7 +357,17 @@ func main() {
 		matchnamer = namemapper
 	}
 
-	pc, err := NewProcessCollector(*procfsPath, *children, *threads, *smaps, matchnamer, *recheck, *debug)
+	pc, err := NewProcessCollector(
+		ProcessCollectorOption{
+			ProcFSPath:  *procfsPath,
+			Children:    *children,
+			Threads:     *threads,
+			GatherSMaps: *smaps,
+			Namer:       matchnamer,
+			Recheck:     *recheck,
+			Debug:       *debug,
+		},
+	)
 	if err != nil {
 		log.Fatalf("Error initializing: %v", err)
 	}
@@ -397,6 +407,16 @@ type (
 		done    chan struct{}
 	}
 
+	ProcessCollectorOption struct {
+		ProcFSPath  string
+		Children    bool
+		Threads     bool
+		GatherSMaps bool
+		Namer       common.MatchNamer
+		Recheck     bool
+		Debug       bool
+	}
+
 	NamedProcessCollector struct {
 		scrapeChan chan scrapeRequest
 		*proc.Grouper
@@ -410,33 +430,25 @@ type (
 	}
 )
 
-func NewProcessCollector(
-	procfsPath string,
-	children bool,
-	threads bool,
-	smaps bool,
-	n common.MatchNamer,
-	recheck bool,
-	debug bool,
-) (*NamedProcessCollector, error) {
-	fs, err := proc.NewFS(procfsPath, debug)
+func NewProcessCollector(options ProcessCollectorOption) (*NamedProcessCollector, error) {
+	fs, err := proc.NewFS(options.ProcFSPath, options.Debug)
 	if err != nil {
 		return nil, err
 	}
 
-	fs.GatherSMaps = smaps
+	fs.GatherSMaps = options.GatherSMaps
 	p := &NamedProcessCollector{
 		scrapeChan: make(chan scrapeRequest),
-		Grouper:    proc.NewGrouper(n, children, threads, recheck, debug),
+		Grouper:    proc.NewGrouper(options.Namer, options.Children, options.Threads, options.Recheck, options.Debug),
 		source:     fs,
-		threads:    threads,
-		smaps:      smaps,
-		debug:      debug,
+		threads:    options.Threads,
+		smaps:      options.GatherSMaps,
+		debug:      options.Debug,
 	}
 
 	colErrs, _, err := p.Update(p.source.AllProcs())
 	if err != nil {
-		if debug {
+		if options.Debug {
 			log.Print(err)
 		}
 		return nil, err

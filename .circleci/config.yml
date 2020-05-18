@@ -31,7 +31,7 @@ jobs:
       - checkout
       - run: sudo apt-get -qq update
       - run: sudo apt-get install -y rpm
-      - run: curl -sL https://git.io/goreleaser | bash
+      - run: curl -sL https://git.io/goreleaser | VERSION=v0.134.0 bash
 
   release_image:
     environment:

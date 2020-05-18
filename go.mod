@@ -13,7 +13,7 @@ require (
 	github.com/prometheus/client_golang v0.8.0
 	github.com/prometheus/client_model v0.0.0-20180712105110-5c3871d89910 // indirect
 	github.com/prometheus/common v0.0.0-20180801064454-c7de2306084e // indirect
-	github.com/prometheus/procfs v0.0.12-0.20200505152635-9654394ca94a
+	github.com/prometheus/procfs v0.0.12-0.20200513160535-c6ff04bafc38
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127
 	gopkg.in/yaml.v2 v2.2.1
 )

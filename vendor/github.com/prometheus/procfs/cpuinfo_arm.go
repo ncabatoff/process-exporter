@@ -15,4 +15,4 @@
 
 package procfs
 
-var parseCPUInfo = parseCPUInfoS390X
+var parseCPUInfo = parseCPUInfoARM

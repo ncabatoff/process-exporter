@@ -12,8 +12,7 @@
 // limitations under the License.
 
 // +build linux
-// +build s390x
 
 package procfs
 
-var parseCPUInfo = parseCPUInfoS390x
+var parseCPUInfo = parseCPUInfoS390X

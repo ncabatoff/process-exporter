@@ -4,6 +4,7 @@ go 1.12
 
 require (
 	github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973 // indirect
+	github.com/fsnotify/fsnotify v1.4.9
 	github.com/golang/protobuf v1.1.0 // indirect
 	github.com/google/go-cmp v0.3.1
 	github.com/kr/pretty v0.1.0 // indirect

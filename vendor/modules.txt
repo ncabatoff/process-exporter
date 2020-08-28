@@ -1,5 +1,7 @@
 # github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973
 github.com/beorn7/perks/quantile
+# github.com/fsnotify/fsnotify v1.4.9
+github.com/fsnotify/fsnotify
 # github.com/golang/protobuf v1.1.0
 github.com/golang/protobuf/proto
 # github.com/google/go-cmp v0.3.1

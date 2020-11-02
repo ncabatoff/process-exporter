@@ -1,10 +1,16 @@
 version: 2
+executors:
+  golang:
+    docker:
+    - image: cimg/go:1.15
+  docker:
+    docker:
+      - image: docker:stable-git
+
 jobs:
 
   build:
-    docker:
-      - image: circleci/golang:1.12-stretch
-    working_directory: /go/src/github.com/ncabatoff/process-exporter
+    executor: golang
     steps:
       - checkout
       - run: make style vet test build integ
@@ -12,9 +18,7 @@ jobs:
   image:
     environment:
         IMAGE_NAME: ncabatoff/process-exporter
-    docker:
-      - image: docker:stable-git
-    working_directory: /go/src/github.com/ncabatoff/process-exporter
+    executor: docker
     steps:
       - checkout
       - setup_remote_docker
@@ -24,9 +28,7 @@ jobs:
           docker push $IMAGE_NAME:latest
 
   release:
-    docker:
-      - image: circleci/golang:1.12
-    working_directory: /go/src/github.com/ncabatoff/process-exporter
+    executor: golang
     steps:
       - checkout
       - run: sudo apt-get -qq update
@@ -36,9 +38,7 @@ jobs:
   release_image:
     environment:
       IMAGE_NAME: ncabatoff/process-exporter
-    docker:
-      - image: docker:stable-git
-    working_directory: /go/src/github.com/ncabatoff/process-exporter
+    executor: docker
     steps:
       - checkout
       - setup_remote_docker

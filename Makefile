@@ -1,4 +1,4 @@
-pkgs          = $(shell go list ./... | grep -v /vendor/)
+pkgs          = $(shell go list ./...)
 
 PREFIX                  ?= $(shell pwd)
 BIN_DIR                 ?= $(shell pwd)
@@ -10,7 +10,7 @@ all: format vet test build smoke
 
 style:
 	@echo ">> checking code style"
-	@! gofmt -d $(shell find . -path ./vendor -prune -o -name '*.go' -print) | grep '^'
+	@! gofmt -d $(shell find . -name '*.go' -print) | grep '^'
 
 test:
 	@echo ">> running short tests"
@@ -51,9 +51,17 @@ docker:
 	docker run --rm --volumes-from configs "$(DOCKER_IMAGE_NAME):$(TAG_VERSION)" $(SMOKE_TEST)
 
 dockertest:
-	docker run --rm -it -v `pwd`:/go/src/github.com/ncabatoff/process-exporter golang:1.12  make -C /go/src/github.com/ncabatoff/process-exporter test
+	docker run --rm -it -v `pwd`:/go/src/github.com/ncabatoff/process-exporter golang:1.15  make -C /go/src/github.com/ncabatoff/process-exporter test
 
 dockerinteg:
-	docker run --rm -it -v `pwd`:/go/src/github.com/ncabatoff/process-exporter golang:1.12  make -C /go/src/github.com/ncabatoff/process-exporter build integ
+	docker run --rm -it -v `pwd`:/go/src/github.com/ncabatoff/process-exporter golang:1.15  make -C /go/src/github.com/ncabatoff/process-exporter build integ
+
+.PHONY: update-go-deps
+update-go-deps:
+	@echo ">> updating Go dependencies"
+	@for m in $$(go list -mod=readonly -m -f '{{ if and (not .Indirect) (not .Main)}}{{.Path}}{{end}}' all); do \
+		go get $$m; \
+	done
+	go mod tidy
 
 .PHONY: all style format test vet build integ docker

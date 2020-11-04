@@ -26,10 +26,10 @@ nfpms:
       - rpm
     bindir: /usr/bin
     files:
-      "packaging/process-exporter.service": "/lib/systemd/system/process-exporter.service"
+      packaging/process-exporter.service: /lib/systemd/system/process-exporter.service
     config_files:
-      "packaging/conf/all.yaml": "/etc/process-exporter/all.yaml"
-      "packaging/default/process-exporter": "/etc/default/process-exporter"
+      packaging/conf/all.yaml: /etc/process-exporter/all.yaml
+      packaging/default/process-exporter: /etc/default/process-exporter
     scripts:
       postinstall: "packaging/scripts/postinstall.sh"
       postremove: "packaging/scripts/postremove.sh"

@@ -4,8 +4,8 @@ Description=Process Exporter for Prometheus
 [Service]
 User=root
 Type=simple
-EnvironmentFile=/etc/default/process-exporter
-ExecStart=/usr/bin/process-exporter ${OPTS}
+EnvironmentFile=-/etc/default/process-exporter
+ExecStart=/usr/bin/process-exporter $OPTS
 KillMode=process
 Restart=always
 

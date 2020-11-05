@@ -17,6 +17,7 @@ import (
 	"github.com/ncabatoff/process-exporter/proc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	promVersion "github.com/prometheus/common/version"
 )
 
 // Version is set at build time use ldflags.
@@ -276,6 +277,11 @@ func (nmr *nameMapperRegex) MatchAndName(nacl common.ProcAttributes) (bool, stri
 	return false, ""
 }
 
+func init() {
+	promVersion.Version = version
+	prometheus.MustRegister(promVersion.NewCollector("process_exporter"))
+}
+
 func main() {
 	var (
 		listenAddress = flag.String("web.listen-address", ":9256",
@@ -310,7 +316,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("process-exporter version %s\n", version)
+		fmt.Printf("%s\n", promVersion.Print("process-exporter"))
 		os.Exit(0)
 	}
 

@@ -14,6 +14,8 @@ builds:
 archives:
   - name_template: "process-exporter-{{ .Version }}.{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
     wrap_in_directory: true
+checksum:
+  name_template: checksums.txt
 nfpms:
   - homepage: https://github.com/ncabatoff/process-exporter
     maintainer: nick.cabatoff+procexp@gmail.com
@@ -24,9 +26,10 @@ nfpms:
       - rpm
     bindir: /usr/bin
     files:
-      "packaging/process-exporter.service": "/lib/systemd/system/process-exporter.service"
+      packaging/process-exporter.service: /lib/systemd/system/process-exporter.service
     config_files:
-      "packaging/conf/all.yaml": "/etc/process-exporter/all.yaml"
+      packaging/conf/all.yaml: /etc/process-exporter/all.yaml
+      packaging/default/process-exporter: /etc/default/process-exporter
     scripts:
       postinstall: "packaging/scripts/postinstall.sh"
       postremove: "packaging/scripts/postremove.sh"

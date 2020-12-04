@@ -312,6 +312,12 @@ func main() {
 			"log debugging information to stdout")
 		showVersion = flag.Bool("version", false,
 			"print version information and exit")
+		securedMetrics = flag.Bool("web.secured-metrics", false,
+			"Expose metrics using https.")
+		serverCert = flag.String("web.ssl-server-cert", "",
+			"Path to PEM encoded certificate")
+		serverKey = flag.String("web.ssl-server-key", "",
+			"Path to PEM encoded key")
 	)
 	flag.Parse()
 
@@ -403,9 +409,28 @@ func main() {
 			</body>
 			</html>`))
 	})
-	if err := http.ListenAndServe(*listenAddress, nil); err != nil {
-		log.Fatalf("Unable to setup HTTP server: %v", err)
-	}
+	if *securedMetrics {
+		log.Printf("Server started in TLS mode")
+		_, err = os.Stat(*serverCert)
+		if err != nil {
+			log.Fatalf("Unable to load cert file: %v", err)
+			os.Exit(1)
+		}
+		_, err = os.Stat(*serverKey)
+		if err != nil {
+			log.Fatalf("Unable to load key file: %v", err)
+			os.Exit(1)
+		}
+		if err := http.ListenAndServeTLS(*listenAddress, *serverCert, *serverKey, nil); err != nil {
+			log.Fatalf("Unable to setup HTTPS server: %v", err)
+			os.Exit(1)
+		}
+	} else {
+		if err := http.ListenAndServe(*listenAddress, nil); err != nil {
+			log.Fatalf("Unable to setup HTTP server: %v", err)
+			os.Exit(1)
+		}
+
 }
 
 type (

@@ -220,3 +220,8 @@ func TestIterator(t *testing.T) {
 		t.Errorf("procs differs: (-got +want)\n%s", diff)
 	}
 }
+
+// Fail, to test checks API
+func TestFail(t *testing.T) {
+	t.Fail()
+}

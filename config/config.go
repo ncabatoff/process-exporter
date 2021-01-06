@@ -25,10 +25,6 @@ type (
 		matchers []common.MatchNamer
 	}
 
-	Config struct {
-		MatchNamers FirstMatcher
-	}
-
 	commMatcher struct {
 		comms map[string]struct{}
 	}
@@ -66,7 +62,6 @@ type (
 
 func (c *cmdlineMatcher) String() string {
 	return fmt.Sprintf("cmdlines: %+v", c.regexes)
-
 }
 
 func (e *exeMatcher) String() string {
@@ -179,6 +174,98 @@ func (m andMatcher) Match(nacl common.ProcAttributes) bool {
 	return true
 }
 
+type Config struct {
+	MatchNamers FirstMatcher
+}
+
+func (c *Config) UnmarshalYAML(unmarshal func(v interface{}) error) error {
+	type (
+		root struct {
+			Matchers MatcherRules `yaml:"process_names"`
+		}
+	)
+
+	var r root
+	if err := unmarshal(&r); err != nil {
+		return err
+	}
+
+	cfg, err := r.Matchers.ToConfig()
+	if err != nil {
+		return err
+	}
+	*c = *cfg
+	return nil
+}
+
+type MatcherGroup struct {
+	Name         string   `yaml:"name"`
+	CommRules    []string `yaml:"comm"`
+	ExeRules     []string `yaml:"exe"`
+	CmdlineRules []string `yaml:"cmdline"`
+}
+
+type MatcherRules []MatcherGroup
+
+func (r MatcherRules) ToConfig() (*Config, error) {
+	var cfg Config
+
+	for _, matcher := range r {
+		var matchers andMatcher
+
+		if matcher.CommRules != nil {
+			comms := make(map[string]struct{})
+			for _, c := range matcher.CommRules {
+				comms[c] = struct{}{}
+			}
+			matchers = append(matchers, &commMatcher{comms})
+		}
+		if matcher.ExeRules != nil {
+			exes := make(map[string]string)
+			for _, e := range matcher.ExeRules {
+				if strings.Contains(e, "/") {
+					exes[filepath.Base(e)] = e
+				} else {
+					exes[e] = ""
+				}
+			}
+			matchers = append(matchers, &exeMatcher{exes})
+		}
+		if matcher.CmdlineRules != nil {
+			var rs []*regexp.Regexp
+			for _, c := range matcher.CmdlineRules {
+				r, err := regexp.Compile(c)
+				if err != nil {
+					return nil, fmt.Errorf("bad cmdline regex %q: %v", c, err)
+				}
+				rs = append(rs, r)
+			}
+			matchers = append(matchers, &cmdlineMatcher{
+				regexes:  rs,
+				captures: make(map[string]string),
+			})
+		}
+		if len(matchers) == 0 {
+			return nil, fmt.Errorf("no matchers provided")
+		}
+
+		nametmpl := matcher.Name
+		if nametmpl == "" {
+			nametmpl = "{{.ExeBase}}"
+		}
+		tmpl := template.New("cmdname")
+		tmpl, err := tmpl.Parse(nametmpl)
+		if err != nil {
+			return nil, fmt.Errorf("bad name template %q: %v", nametmpl, err)
+		}
+
+		matchNamer := &matchNamer{matchers, templateNamer{tmpl}}
+		cfg.MatchNamers.matchers = append(cfg.MatchNamers.matchers, matchNamer)
+	}
+
+	return &cfg, nil
+}
+
 // ReadRecipesFile opens the named file and extracts recipes from it.
 func ReadFile(cfgpath string, debug bool) (*Config, error) {
 	content, err := ioutil.ReadFile(cfgpath)
@@ -193,115 +280,10 @@ func ReadFile(cfgpath string, debug bool) (*Config, error) {
 
 // GetConfig extracts Config from content by parsing it as YAML.
 func GetConfig(content string, debug bool) (*Config, error) {
-	var yamldata map[string]interface{}
-
-	err := yaml.Unmarshal([]byte(content), &yamldata)
+	var cfg Config
+	err := yaml.Unmarshal([]byte(content), &cfg)
 	if err != nil {
 		return nil, err
 	}
-	yamlProcnames, ok := yamldata["process_names"]
-	if !ok {
-		return nil, fmt.Errorf("error parsing YAML config: no top-level 'process_names' key")
-	}
-	procnames, ok := yamlProcnames.([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("error parsing YAML config: 'process_names' is not a list")
-	}
-
-	var cfg Config
-	for i, procname := range procnames {
-		mn, err := getMatchNamer(procname)
-		if err != nil {
-			return nil, fmt.Errorf("unable to parse process_name entry %d: %v", i, err)
-		}
-		cfg.MatchNamers.matchers = append(cfg.MatchNamers.matchers, mn)
-	}
-
 	return &cfg, nil
-}
-
-func getMatchNamer(yamlmn interface{}) (common.MatchNamer, error) {
-	nm, ok := yamlmn.(map[interface{}]interface{})
-	if !ok {
-		return nil, fmt.Errorf("not a map")
-	}
-
-	var smap = make(map[string][]string)
-	var nametmpl string
-	for k, v := range nm {
-		key, ok := k.(string)
-		if !ok {
-			return nil, fmt.Errorf("non-string key %v", k)
-		}
-
-		if key == "name" {
-			value, ok := v.(string)
-			if !ok {
-				return nil, fmt.Errorf("non-string value %v for key %q", v, key)
-			}
-			nametmpl = value
-		} else {
-			vals, ok := v.([]interface{})
-			if !ok {
-				return nil, fmt.Errorf("non-string array value %v for key %q", v, key)
-			}
-			var strs []string
-			for i, si := range vals {
-				s, ok := si.(string)
-				if !ok {
-					return nil, fmt.Errorf("non-string value %v in list[%d] for key %q", v, i, key)
-				}
-				strs = append(strs, s)
-			}
-			smap[key] = strs
-		}
-	}
-
-	var matchers andMatcher
-	if comm, ok := smap["comm"]; ok {
-		comms := make(map[string]struct{})
-		for _, c := range comm {
-			comms[c] = struct{}{}
-		}
-		matchers = append(matchers, &commMatcher{comms})
-	}
-	if exe, ok := smap["exe"]; ok {
-		exes := make(map[string]string)
-		for _, e := range exe {
-			if strings.Contains(e, "/") {
-				exes[filepath.Base(e)] = e
-			} else {
-				exes[e] = ""
-			}
-		}
-		matchers = append(matchers, &exeMatcher{exes})
-	}
-	if cmdline, ok := smap["cmdline"]; ok {
-		var rs []*regexp.Regexp
-		for _, c := range cmdline {
-			r, err := regexp.Compile(c)
-			if err != nil {
-				return nil, fmt.Errorf("bad cmdline regex %q: %v", c, err)
-			}
-			rs = append(rs, r)
-		}
-		matchers = append(matchers, &cmdlineMatcher{
-			regexes:  rs,
-			captures: make(map[string]string),
-		})
-	}
-	if len(matchers) == 0 {
-		return nil, fmt.Errorf("no matchers provided")
-	}
-
-	if nametmpl == "" {
-		nametmpl = "{{.ExeBase}}"
-	}
-	tmpl := template.New("cmdname")
-	tmpl, err := tmpl.Parse(nametmpl)
-	if err != nil {
-		return nil, fmt.Errorf("bad name template %q: %v", nametmpl, err)
-	}
-
-	return &matchNamer{matchers, templateNamer{tmpl}}, nil
 }

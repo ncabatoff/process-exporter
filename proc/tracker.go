@@ -246,21 +246,23 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 	}
 
 	var threads []Thread
-	threads, err = proc.GetThreads()
-	if err != nil {
-		if t.debug {
-			log.Printf("can't read thread metrics for %+v: %v", procID, err)
+	if t.trackThreads {
+		threads, err = proc.GetThreads()
+		if err != nil {
+			if t.debug {
+				log.Printf("can't read thread metrics for %+v: %v", procID, err)
+			}
+			softerrors |= 1
 		}
-		softerrors |= 1
-	}
-	cerrs.Partial += softerrors
+		cerrs.Partial += softerrors
 
-	if len(threads) > 0 {
-		metrics.Counts.CtxSwitchNonvoluntary, metrics.Counts.CtxSwitchVoluntary = 0, 0
-		for _, thread := range threads {
-			metrics.Counts.CtxSwitchNonvoluntary += thread.Counts.CtxSwitchNonvoluntary
-			metrics.Counts.CtxSwitchVoluntary += thread.Counts.CtxSwitchVoluntary
-			metrics.States.Add(thread.States)
+		if len(threads) > 0 {
+			metrics.Counts.CtxSwitchNonvoluntary, metrics.Counts.CtxSwitchVoluntary = 0, 0
+			for _, thread := range threads {
+				metrics.Counts.CtxSwitchNonvoluntary += thread.Counts.CtxSwitchNonvoluntary
+				metrics.Counts.CtxSwitchVoluntary += thread.Counts.CtxSwitchVoluntary
+				metrics.States.Add(thread.States)
+			}
 		}
 	}
 

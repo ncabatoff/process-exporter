@@ -17,7 +17,9 @@ import (
 	"github.com/ncabatoff/process-exporter/proc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/promlog"
 	promVersion "github.com/prometheus/common/version"
+	"github.com/prometheus/exporter-toolkit/web"
 )
 
 // Version is set at build time use ldflags.
@@ -306,6 +308,8 @@ func main() {
 			"print manual")
 		configPath = flag.String("config.path", "",
 			"path to YAML config file")
+		tlsConfigFile = flag.String("web.config.file", "",
+			"path to YAML web config file")
 		recheck = flag.Bool("recheck", false,
 			"recheck process names on each scrape")
 		debug = flag.Bool("debug", false,
@@ -314,6 +318,9 @@ func main() {
 			"print version information and exit")
 	)
 	flag.Parse()
+
+	promlogConfig := &promlog.Config{}
+	logger := promlog.New(promlogConfig)
 
 	if *showVersion {
 		fmt.Printf("%s\n", promVersion.Print("process-exporter"))
@@ -403,8 +410,10 @@ func main() {
 			</body>
 			</html>`))
 	})
-	if err := http.ListenAndServe(*listenAddress, nil); err != nil {
-		log.Fatalf("Unable to setup HTTP server: %v", err)
+	server := &http.Server{Addr: *listenAddress}
+	if err := web.ListenAndServe(server, *tlsConfigFile, logger); err != nil {
+		log.Fatalf("Failed to start the server: %v", err)
+		os.Exit(1)
 	}
 }
 

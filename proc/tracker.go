@@ -216,7 +216,7 @@ func (tp *trackedProc) update(metrics Metrics, now time.Time, cerrs *CollectErro
 // It is not an error if the process disappears while we are reading
 // its info out of /proc, it just means nothing will be returned and
 // the tracker will be unchanged.
-func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectErrors) {
+func (t *Tracker) handleProc(proc Proc, updateTime time.Time, tick *time.Duration) (*IDInfo, CollectErrors) {
 	var cerrs CollectErrors
 	procID, err := proc.GetProcID()
 	if err != nil {
@@ -264,22 +264,29 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 		}
 	}
 
+	now := time.Now()
+	static, err := proc.GetStatic()
+	if err != nil {
+		if t.debug {
+			log.Printf("error reading static details for %+v: %v", procID, err)
+		}
+		return nil, cerrs
+	}
+	*tick = *tick + time.Now().Sub(now)
+	// the exec name was changed,need recal the proc info
+	if known && last.static.Name != static.Name {
+		known = false
+	}
 	var newProc *IDInfo
 	if known {
 		last.update(metrics, updateTime, &cerrs, threads)
 	} else {
-		static, err := proc.GetStatic()
-		if err != nil {
-			if t.debug {
-				log.Printf("error reading static details for %+v: %v", procID, err)
-			}
-			return nil, cerrs
-		}
+
+		// log.Println("get static tick=", time.Now().Sub(now))
 		newProc = &IDInfo{procID, static, metrics, threads}
 		if t.debug {
 			log.Printf("found new proc: %s", newProc)
 		}
-
 		// Is this a new process with the same pid as one we already know?
 		// Then delete it from the known map, otherwise the cleanup in Update()
 		// will remove the ProcIds entry we're creating here.
@@ -298,16 +305,17 @@ func (t *Tracker) update(procs Iter) ([]IDInfo, CollectErrors, error) {
 	var newProcs []IDInfo
 	var colErrs CollectErrors
 	var now = time.Now()
+	var tick time.Duration
 
 	for procs.Next() {
-		newProc, cerrs := t.handleProc(procs, now)
+		newProc, cerrs := t.handleProc(procs, now, &tick)
 		if newProc != nil {
 			newProcs = append(newProcs, *newProc)
 		}
 		colErrs.Read += cerrs.Read
 		colErrs.Partial += cerrs.Partial
 	}
-
+	log.Println("get static tick=", tick)
 	err := procs.Close()
 	if err != nil {
 		return nil, colErrs, fmt.Errorf("Error reading procs: %v", err)

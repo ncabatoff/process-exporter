@@ -216,7 +216,7 @@ func (tp *trackedProc) update(metrics Metrics, now time.Time, cerrs *CollectErro
 // It is not an error if the process disappears while we are reading
 // its info out of /proc, it just means nothing will be returned and
 // the tracker will be unchanged.
-func (t *Tracker) handleProc(proc Proc, updateTime time.Time, tick *time.Duration) (*IDInfo, CollectErrors) {
+func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectErrors) {
 	var cerrs CollectErrors
 	procID, err := proc.GetProcID()
 	if err != nil {
@@ -264,25 +264,44 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time, tick *time.Duratio
 		}
 	}
 
-	now := time.Now()
-	static, err := proc.GetStatic()
-	if err != nil {
-		if t.debug {
-			log.Printf("error reading static details for %+v: %v", procID, err)
-		}
-		return nil, cerrs
-	}
-	*tick = *tick + time.Now().Sub(now)
+	var static Static
+
 	// the exec name was changed,need recal the proc info
-	if known && last.static.Name != static.Name {
-		known = false
+	var recheck_name bool
+	if known {
+		if d := time.Now().UTC().Sub(last.static.StartTime); d < 1*time.Minute {
+			log.Printf("the proc id:%+v was running %+v", procID, d)
+			recheck_name = true
+		}
 	}
+	if !known || recheck_name {
+		static, err = proc.GetStatic()
+		if err != nil {
+			if t.debug {
+				log.Printf("error reading static details for %+v: %v", procID, err)
+			}
+			return nil, cerrs
+		}
+
+		if recheck_name && last.static.Name != static.Name {
+			log.Printf("last info=%+v now info=%+v", last.static, static)
+			known = false // the exec name was changed,need recal the proc info
+		} else if recheck_name {
+			log.Println("the proc stat is not change,pid=", proc.GetPid())
+		}
+	}
+
 	var newProc *IDInfo
 	if known {
 		last.update(metrics, updateTime, &cerrs, threads)
 	} else {
-
-		// log.Println("get static tick=", time.Now().Sub(now))
+		// static, err := proc.GetStatic()
+		// if err != nil {
+		// 	if t.debug {
+		// 		log.Printf("error reading static details for %+v: %v", procID, err)
+		// 	}
+		// 	return nil, cerrs
+		// }
 		newProc = &IDInfo{procID, static, metrics, threads}
 		if t.debug {
 			log.Printf("found new proc: %s", newProc)
@@ -305,17 +324,16 @@ func (t *Tracker) update(procs Iter) ([]IDInfo, CollectErrors, error) {
 	var newProcs []IDInfo
 	var colErrs CollectErrors
 	var now = time.Now()
-	var tick time.Duration
 
 	for procs.Next() {
-		newProc, cerrs := t.handleProc(procs, now, &tick)
+		newProc, cerrs := t.handleProc(procs, now)
 		if newProc != nil {
 			newProcs = append(newProcs, *newProc)
 		}
 		colErrs.Read += cerrs.Read
 		colErrs.Partial += cerrs.Partial
 	}
-	log.Println("get static tick=", tick)
+
 	err := procs.Close()
 	if err != nil {
 		return nil, colErrs, fmt.Errorf("Error reading procs: %v", err)

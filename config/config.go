@@ -50,6 +50,7 @@ type (
 	}
 
 	templateParams struct {
+		Cgroups   []string
 		Comm      string
 		ExeBase   string
 		ExeFull   string
@@ -116,6 +117,7 @@ func (m *matchNamer) MatchAndName(nacl common.ProcAttributes) (bool, string) {
 	var buf bytes.Buffer
 	m.template.Execute(&buf, &templateParams{
 		Comm:      nacl.Name,
+		Cgroups:   nacl.Cgroups,
 		ExeBase:   exebase,
 		ExeFull:   exefull,
 		Matches:   matches,

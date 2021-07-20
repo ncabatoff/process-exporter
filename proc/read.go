@@ -30,6 +30,7 @@ type (
 	Static struct {
 		Name         string
 		Cmdline      []string
+		Cgroups      []string
 		ParentPid    int
 		StartTime    time.Time
 		EffectiveUID int
@@ -135,6 +136,7 @@ type (
 		stat    *procfs.ProcStat
 		status  *procfs.ProcStatus
 		cmdline []string
+		cgroups []procfs.Cgroup
 		io      *procfs.ProcIO
 		fs      *FS
 		wchan   *string
@@ -299,6 +301,18 @@ func (p *proccache) getStatus() (procfs.ProcStatus, error) {
 	return *p.status, nil
 }
 
+func (p *proccache) getCgroups() ([]procfs.Cgroup, error) {
+	if p.cgroups == nil {
+		cgroups, err := p.Proc.Cgroups()
+		if err != nil {
+			return nil, err
+		}
+		p.cgroups = cgroups
+	}
+
+	return p.cgroups, nil
+}
+
 // GetProcID implements Proc.
 func (p *proccache) GetProcID() (ID, error) {
 	if p.procid == nil {
@@ -367,6 +381,19 @@ func (p *proccache) GetStatic() (Static, error) {
 		return Static{}, err
 	}
 
+	// /proc/<pid>/cgroup(s) is normally world-readable.
+	// However cgroups aren't always supported -> return an empty array in that
+	// case.
+	cgroups, err := p.getCgroups()
+	var cgroupsStr []string
+	if err != nil {
+		cgroupsStr = []string{}
+	} else {
+		for _, c := range cgroups {
+			cgroupsStr = append(cgroupsStr, c.Path)
+		}
+	}
+
 	effectiveUID, err := strconv.ParseInt(status.UIDs[1], 10, 64)
 	if err != nil {
 		return Static{}, err
@@ -375,6 +402,7 @@ func (p *proccache) GetStatic() (Static, error) {
 	return Static{
 		Name:         stat.Comm,
 		Cmdline:      cmdline,
+		Cgroups:      cgroupsStr,
 		ParentPid:    stat.PPID,
 		StartTime:    startTime,
 		EffectiveUID: int(effectiveUID),

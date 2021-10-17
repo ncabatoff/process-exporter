@@ -38,7 +38,7 @@ nfpms:
     contents:
       - src: packaging/process-exporter.service
         dst: /lib/systemd/system/process-exporter.service
-       src: packaging/conf/all.yaml
+      - src: packaging/conf/all.yaml
         dst: /etc/process-exporter/all.yaml
         type: config
       - src: packaging/default/process-exporter

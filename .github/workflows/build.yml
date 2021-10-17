@@ -48,7 +48,6 @@ jobs:
       - name: build docker image and, if not PR, push
         uses: docker/bake-action@v1
         with:
-          context: .
           file: ./Dockerfile
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}

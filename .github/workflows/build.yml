@@ -55,6 +55,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           files: |
-            ./docker-bake.hcl
+            ./.github/workflows/docker-bake.hcl
             ${{ steps.meta.outputs.bake-file }}
           targets: build

@@ -46,11 +46,10 @@ jobs:
             type=sha
 
       - name: build docker image and, if not PR, push
-        uses: docker/bake-action@v1
+        uses: docker/build-push-action@v2
         with:
-          platforms: linux/amd64
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          files: |
-            ./docker-bake.hcl
-            ${{ steps.meta.outputs.bake-file }}
-          targets: build
+          tags: ${{ steps.meta.outputs.tags }}

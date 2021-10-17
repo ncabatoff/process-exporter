@@ -10,8 +10,11 @@ jobs:
 
       - uses: actions/checkout@master
 
-      - name: run make
-        run: make style vet test build integ
+      - run: make style
+      - run: make vet
+      - run: make test
+      - run: make build
+      - run: make integ
 
   image:
     runs-on: ubuntu-latest

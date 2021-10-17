@@ -3,12 +3,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
-
       - name: setup Go
         uses: actions/setup-go@v2
         with:
           go-version: '1.17.2'
+
+      - uses: actions/checkout@master
 
       - name: run make
         run: make style vet test build integ
@@ -48,12 +48,9 @@ jobs:
       - name: build docker image and, if not PR, push
         uses: docker/bake-action@v1
         with:
-          file: ./Dockerfile
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
           files: |
-            ./.github/workflows/docker-bake.hcl
+            ./docker-bake.hcl
             ${{ steps.meta.outputs.bake-file }}
           targets: build

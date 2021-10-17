@@ -1,13 +1,12 @@
 # Start from a Debian image with the latest version of Go installed
 # and a workspace (GOPATH) configured at /go.
-FROM --platform=$BUILDPLATFORM golang:alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.16 AS build
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 WORKDIR /go/src/github.com/ncabatoff/process-exporter
 ADD . .
 
 # Build the process-exporter command inside the container.
-RUN apk add make
 RUN CGO_ENABLED=0 make
 
 FROM scratch

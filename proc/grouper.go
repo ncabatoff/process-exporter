@@ -53,7 +53,7 @@ func NewGrouper(namer common.MatchNamer, trackChildren, trackThreads, alwaysRech
 	g := Grouper{
 		groupAccum:  make(map[string]Counts),
 		threadAccum: make(map[string]map[string]Threads),
-		tracker:     NewTracker(namer, trackChildren, trackThreads, alwaysRecheck, debug),
+		tracker:     NewTracker(namer, trackChildren, alwaysRecheck, debug),
 		debug:       debug,
 	}
 	return &g

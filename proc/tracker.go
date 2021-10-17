@@ -29,8 +29,6 @@ type (
 		// trackChildren makes Tracker track descendants of procs the
 		// namer wanted tracked.
 		trackChildren bool
-		// trackThreads makes Tracker track per-thread metrics.
-		trackThreads bool
 		// never ignore processes, i.e. always re-check untracked processes in case comm has changed
 		alwaysRecheck bool
 		username      map[int]string
@@ -141,13 +139,12 @@ func (tp *trackedProc) getUpdate() Update {
 }
 
 // NewTracker creates a Tracker.
-func NewTracker(namer common.MatchNamer, trackChildren, trackThreads, alwaysRecheck, debug bool) *Tracker {
+func NewTracker(namer common.MatchNamer, trackChildren bool, alwaysRecheck bool, debug bool) *Tracker {
 	return &Tracker{
 		namer:         namer,
 		tracked:       make(map[ID]*trackedProc),
 		procIds:       make(map[int]ID),
 		trackChildren: trackChildren,
-		trackThreads:  trackThreads,
 		alwaysRecheck: alwaysRecheck,
 		username:      make(map[int]string),
 		debug:         debug,

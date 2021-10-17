@@ -5,7 +5,8 @@ Prometheus exporter that mines /proc to report on selected processes.
 
 [![Release](https://img.shields.io/github/release/ncabatoff/process-exporter.svg?style=flat-square")][release]
 [![Powered By: GoReleaser](https://img.shields.io/badge/powered%20by-goreleaser-green.svg?branch=master)](https://github.com/goreleaser)
-[![CircleCI](https://circleci.com/gh/ncabatoff/process-exporter.svg?style=shield)](https://circleci.com/gh/ncabatoff/process-exporter)
+![Build](https://github.com/ncabatoff/process-exporter/actions/workflows/build.yml/badge.svg)
+
 Some apps are impractical to instrument directly, either because you
 don't control the code or they're written in a language that isn't easy to
 instrument with Prometheus.  We must instead resort to mining /proc.

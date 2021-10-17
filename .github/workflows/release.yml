@@ -28,7 +28,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v2
         with:
           distribution: goreleaser
-          version: latest
+          version: "~> 0.182"
           args: release --rm-dist --snapshot
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

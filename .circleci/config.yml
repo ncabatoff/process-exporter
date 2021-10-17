@@ -42,6 +42,7 @@ jobs:
       - checkout
       - run: sudo apt-get -qq update
       - run: sudo apt-get install -y rpm
+      - run: echo "export BRANCH=$CIRCLE_BRANCH" >> $BASH_ENV
       - run: curl -sL https://git.io/goreleaser | VERSION=v0.146.0 bash
 
   release_image:

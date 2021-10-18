@@ -232,6 +232,8 @@ says
 
 but I would take it with a grain of salt.
 
+As `/proc/[pid]/io` are set by the kernel as read only to the process' user (see #137), to get these values you should run `process-exporter` either as that user or as `root`. Otherwise, we can't read these values and you'll get a constant 0 in the metric.
+
 ### write_bytes_total counter
 
 Bytes written based on /proc/[pid]/io field write_bytes.  As with

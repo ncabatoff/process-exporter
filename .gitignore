@@ -1,5 +1,6 @@
 .idea
-process-exporter
+/process-exporter
 load-generator
 integration-tester
 dist
+/vendor

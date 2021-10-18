@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ncabatoff/procfs"
+	"github.com/prometheus/procfs"
 )
 
 // ErrProcNotExist indicates a process couldn't be read because it doesn't exist,
@@ -49,9 +49,11 @@ type (
 
 	// Memory describes a proc's memory usage.
 	Memory struct {
-		ResidentBytes uint64
-		VirtualBytes  uint64
-		VmSwapBytes   uint64
+		ResidentBytes         uint64
+		VirtualBytes          uint64
+		VmSwapBytes           uint64
+		ProportionalBytes     uint64
+		ProportionalSwapBytes uint64
 	}
 
 	// Filedesc describes a proc's file descriptor usage and soft limit.
@@ -187,9 +189,10 @@ type (
 	// FS implements Source.
 	FS struct {
 		procfs.FS
-		BootTime   uint64
-		MountPoint string
-		debug      bool
+		BootTime    uint64
+		MountPoint  string
+		GatherSMaps bool
+		debug       bool
 	}
 )
 
@@ -333,7 +336,7 @@ func (p *proccache) getWchan() (string, error) {
 
 func (p *proccache) getIo() (procfs.ProcIO, error) {
 	if p.io == nil {
-		io, err := p.Proc.NewIO()
+		io, err := p.Proc.IO()
 		if err != nil {
 			return procfs.ProcIO{}, err
 		}
@@ -364,12 +367,17 @@ func (p *proccache) GetStatic() (Static, error) {
 		return Static{}, err
 	}
 
+	effectiveUID, err := strconv.ParseInt(status.UIDs[1], 10, 64)
+	if err != nil {
+		return Static{}, err
+	}
+
 	return Static{
 		Name:         stat.Comm,
 		Cmdline:      cmdline,
 		ParentPid:    stat.PPID,
 		StartTime:    startTime,
-		EffectiveUID: status.UIDEffective,
+		EffectiveUID: int(effectiveUID),
 	}, nil
 }
 
@@ -403,7 +411,7 @@ func (p proc) GetCounts() (Counts, int, error) {
 		MajorPageFaults:       uint64(stat.MajFlt),
 		MinorPageFaults:       uint64(stat.MinFlt),
 		CtxSwitchVoluntary:    uint64(status.VoluntaryCtxtSwitches),
-		CtxSwitchNonvoluntary: uint64(status.NonvoluntaryCtxtSwitches),
+		CtxSwitchNonvoluntary: uint64(status.NonVoluntaryCtxtSwitches),
 	}, softerrors, nil
 }
 
@@ -469,13 +477,25 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 		softerrors |= 1
 	}
 
+	memory := Memory{
+		ResidentBytes: uint64(stat.ResidentMemory()),
+		VirtualBytes:  uint64(stat.VirtualMemory()),
+		VmSwapBytes:   uint64(status.VmSwap),
+	}
+
+	if p.proccache.fs.GatherSMaps {
+		smaps, err := p.Proc.ProcSMapsRollup()
+		if err != nil {
+			softerrors |= 1
+		} else {
+			memory.ProportionalBytes = smaps.Pss
+			memory.ProportionalSwapBytes = smaps.SwapPss
+		}
+	}
+
 	return Metrics{
 		Counts: counts,
-		Memory: Memory{
-			ResidentBytes: uint64(stat.ResidentMemory()),
-			VirtualBytes:  uint64(stat.VirtualMemory()),
-			VmSwapBytes:   uint64(status.VmSwapKB * 1024),
-		},
+		Memory: memory,
 		Filedesc: Filedesc{
 			Open:  int64(numfds),
 			Limit: uint64(limits.OpenFiles),
@@ -549,7 +569,7 @@ func NewFS(mountPoint string, debug bool) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FS{fs, stat.BootTime, mountPoint, debug}, nil
+	return &FS{fs, stat.BootTime, mountPoint, false, debug}, nil
 }
 
 func (fs *FS) threadFs(pid int) (*FS, error) {
@@ -558,7 +578,7 @@ func (fs *FS) threadFs(pid int) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FS{tfs, fs.BootTime, mountPoint, false}, nil
+	return &FS{tfs, fs.BootTime, mountPoint, fs.GatherSMaps, false}, nil
 }
 
 // AllProcs implements Source.

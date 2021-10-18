@@ -5,7 +5,8 @@ Prometheus exporter that mines /proc to report on selected processes.
 
 [![Release](https://img.shields.io/github/release/ncabatoff/process-exporter.svg?style=flat-square")][release]
 [![Powered By: GoReleaser](https://img.shields.io/badge/powered%20by-goreleaser-green.svg?branch=master)](https://github.com/goreleaser)
-[![CircleCI](https://circleci.com/gh/ncabatoff/process-exporter.svg?style=shield)](https://circleci.com/gh/ncabatoff/process-exporter)
+![Build](https://github.com/ncabatoff/process-exporter/actions/workflows/build.yml/badge.svg)
+
 Some apps are impractical to instrument directly, either because you
 don't control the code or they're written in a language that isn't easy to
 instrument with Prometheus.  We must instead resort to mining /proc.
@@ -265,6 +266,15 @@ Number of bytes of memory used.  The extra label `memtype` can have three values
 
 *swapped*: Field VmSwap from /proc/[pid]/status, translated from KB to bytes.
 
+If gathering smaps file is enabled, two additional values for `memtype` are added:
+
+*proportionalResident*: Sum of "Pss" fields from /proc/[pid]/smaps, whose doc says:
+
+> The "proportional set size" (PSS) of a process is the count of pages it has
+> in memory, where each page is divided by the number of processes sharing it.
+
+*proportionalSwapped*: Sum of "SwapPss" fields from /proc/[pid]/smaps
+
 ### open_filedesc gauge
 
 Number of file descriptors, based on counting how many entries are in the directory
@@ -358,7 +368,7 @@ An example Grafana dashboard to view the metrics is available at https://grafana
 
 ## Building
 
-Requires Go 1.12 installed.
+Requires Go 1.13 installed.
 ```
 make
 ```

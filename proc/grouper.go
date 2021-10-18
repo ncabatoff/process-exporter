@@ -53,7 +53,7 @@ func NewGrouper(namer common.MatchNamer, trackChildren, trackThreads, alwaysRech
 	g := Grouper{
 		groupAccum:  make(map[string]Counts),
 		threadAccum: make(map[string]map[string]Threads),
-		tracker:     NewTracker(namer, trackChildren, trackThreads, alwaysRecheck, debug),
+		tracker:     NewTracker(namer, trackChildren, alwaysRecheck, debug),
 		debug:       debug,
 	}
 	return &g
@@ -66,6 +66,8 @@ func groupadd(grp Group, ts Update) Group {
 	grp.Memory.ResidentBytes += ts.Memory.ResidentBytes
 	grp.Memory.VirtualBytes += ts.Memory.VirtualBytes
 	grp.Memory.VmSwapBytes += ts.Memory.VmSwapBytes
+	grp.Memory.ProportionalBytes += ts.Memory.ProportionalBytes
+	grp.Memory.ProportionalSwapBytes += ts.Memory.ProportionalSwapBytes
 	if ts.Filedesc.Open != -1 {
 		grp.OpenFDs += uint64(ts.Filedesc.Open)
 	}

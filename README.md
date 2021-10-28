@@ -107,6 +107,9 @@ Template variables available:
   will only contain a single process.
 - `{{.StartTime}}` contains the start time of the process.  This can be useful
   in conjunction with PID because PIDs get reused over time.
+- `{{.Cgroups}}` contains (if supported) the cgroups of the process
+  (`/proc/self/cgroup`). This is particularly useful for identifying to which container
+  a process belongs.
 
 Using `PID` or `StartTime` is discouraged: this is almost never what you want,
 and is likely to result in high cardinality metrics which Prometheus will have

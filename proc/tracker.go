@@ -419,6 +419,7 @@ func (t *Tracker) Update(iter Iter) (CollectErrors, []Update, error) {
 		nacl := common.ProcAttributes{
 			Name:      idinfo.Name,
 			Cmdline:   idinfo.Cmdline,
+			Cgroups:   idinfo.Cgroups,
 			Username:  t.lookupUid(idinfo.EffectiveUID),
 			PID:       idinfo.Pid,
 			StartTime: idinfo.StartTime,

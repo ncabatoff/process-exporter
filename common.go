@@ -9,6 +9,7 @@ type (
 	ProcAttributes struct {
 		Name      string
 		Cmdline   []string
+		Cgroups   []string
 		Username  string
 		PID       int
 		StartTime time.Time

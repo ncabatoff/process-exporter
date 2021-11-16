@@ -369,3 +369,43 @@ Requires Go 1.13 installed.
 ```
 make
 ```
+
+## Exposing metrics through HTTPS
+
+web-config.yml
+```
+# Minimal TLS configuration example. Additionally, a certificate and a key file
+# are needed.
+tls_server_config:
+  cert_file: server.crt
+  key_file: server.key
+```
+Running
+```
+$ ./process-exporter -web.config.file web-config.yml &
+$ curl -sk https://localhost:9256/metrics | grep process
+
+# HELP namedprocess_scrape_errors general scrape errors: no proc metrics collected during a cycle
+# TYPE namedprocess_scrape_errors counter
+namedprocess_scrape_errors 0
+# HELP namedprocess_scrape_partial_errors incremented each time a tracked proc's metrics collection fails partially, e.g. unreadable I/O stats
+# TYPE namedprocess_scrape_partial_errors counter
+namedprocess_scrape_partial_errors 0
+# HELP namedprocess_scrape_procread_errors incremented each time a proc's metrics collection fails
+# TYPE namedprocess_scrape_procread_errors counter
+namedprocess_scrape_procread_errors 0
+# HELP process_cpu_seconds_total Total user and system CPU time spent in seconds.
+# TYPE process_cpu_seconds_total counter
+process_cpu_seconds_total 0.21
+# HELP process_exporter_build_info A metric with a constant '1' value labeled by version, revision, branch, and goversion from which process_exporter was built.
+# TYPE process_exporter_build_info gauge
+process_exporter_build_info{branch="",goversion="go1.17.3",revision="",version=""} 1
+# HELP process_max_fds Maximum number of open file descriptors.
+# TYPE process_max_fds gauge
+process_max_fds 1.048576e+06
+# HELP process_open_fds Number of open file descriptors.
+# TYPE process_open_fds gauge
+process_open_fds 10
+```
+
+For further information about TLS configuration, please visit: [exporter-toolkit](https://github.com/prometheus/exporter-toolkit/blob/master/docs/web-configuration.md)

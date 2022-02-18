@@ -30,9 +30,11 @@ type (
 		// namer wanted tracked.
 		trackChildren bool
 		// never ignore processes, i.e. always re-check untracked processes in case comm has changed
-		alwaysRecheck bool
-		username      map[int]string
-		debug         bool
+		recheck bool
+		// limit rechecks to this much time
+		recheckTimeLimit time.Duration
+		username         map[int]string
+		debug            bool
 	}
 
 	// Delta is an alias of Counts used to signal that its contents are not
@@ -139,15 +141,16 @@ func (tp *trackedProc) getUpdate() Update {
 }
 
 // NewTracker creates a Tracker.
-func NewTracker(namer common.MatchNamer, trackChildren bool, alwaysRecheck bool, debug bool) *Tracker {
+func NewTracker(namer common.MatchNamer, trackChildren bool, recheck bool, recheckTimeLimit time.Duration, debug bool) *Tracker {
 	return &Tracker{
-		namer:         namer,
-		tracked:       make(map[ID]*trackedProc),
-		procIds:       make(map[int]ID),
-		trackChildren: trackChildren,
-		alwaysRecheck: alwaysRecheck,
-		username:      make(map[int]string),
-		debug:         debug,
+		namer:            namer,
+		tracked:          make(map[ID]*trackedProc),
+		procIds:          make(map[int]ID),
+		trackChildren:    trackChildren,
+		recheck:          recheck,
+		recheckTimeLimit: recheckTimeLimit,
+		username:         make(map[int]string),
+		debug:            debug,
 	}
 }
 
@@ -174,11 +177,19 @@ func (t *Tracker) track(groupName string, idinfo IDInfo) {
 	t.tracked[idinfo.ID] = &tproc
 }
 
-func (t *Tracker) ignore(id ID) {
+func (t *Tracker) ignore(id ID, startTime time.Time) {
 	// only ignore ID if we didn't set recheck to true
-	if t.alwaysRecheck == false {
-		t.tracked[id] = nil
+	if t.recheck {
+		if t.recheckTimeLimit == 0 {
+			// plain -recheck with no time limit:
+			return
+		}
+		if startTime.Add(t.recheckTimeLimit).After(time.Now()) {
+			// -recheckWithTimeLimit is used and the limit is not reached yet:
+			return
+		}
 	}
+	t.tracked[id] = nil
 }
 
 func (tp *trackedProc) update(metrics Metrics, now time.Time, cerrs *CollectErrors, threads []Thread) {
@@ -341,7 +352,7 @@ func (t *Tracker) checkAncestry(idinfo IDInfo, newprocs map[ID]IDInfo) string {
 			log.Printf("ignoring unmatched proc with no matched parent: %+v", idinfo)
 		}
 		// Reached root of process tree without finding a tracked parent.
-		t.ignore(idinfo.ID)
+		t.ignore(idinfo.ID, idinfo.Static.StartTime)
 		return ""
 	}
 
@@ -357,7 +368,7 @@ func (t *Tracker) checkAncestry(idinfo IDInfo, newprocs map[ID]IDInfo) string {
 			return ptproc.groupName
 		}
 		// We've found an untracked parent.
-		t.ignore(idinfo.ID)
+		t.ignore(idinfo.ID, idinfo.Static.StartTime)
 		return ""
 	}
 
@@ -378,7 +389,7 @@ func (t *Tracker) checkAncestry(idinfo IDInfo, newprocs map[ID]IDInfo) string {
 	if t.debug {
 		log.Printf("ignoring unmatched proc with no matched parent: %+v", idinfo)
 	}
-	t.ignore(idinfo.ID)
+	t.ignore(idinfo.ID, idinfo.Static.StartTime)
 	return ""
 }
 

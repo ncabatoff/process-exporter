@@ -180,7 +180,7 @@ process_names:
 ### Using -procnames/-namemapping instead of config.path
 
 Every name in the procnames list becomes a process group. The default name of
-a process is the value found in the second field of /proc/<pid>/stat
+a process is the value found in the second field of `/proc/<pid>/stat`
 ("comm"), which is truncated at 15 chars.  Usually this is the same as the
 name of the executable.
 

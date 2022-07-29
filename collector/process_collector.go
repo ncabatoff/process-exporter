@@ -2,6 +2,7 @@ package collector
 
 import (
 	"log"
+	"unicode/utf8"
 
 	common "github.com/ncabatoff/process-exporter"
 	"github.com/ncabatoff/process-exporter/proc"
@@ -315,33 +316,34 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 
 			if p.threads {
 				for _, thr := range gcounts.Threads {
+					threadName := filterNonutf8Characters(thr.Name)
 					ch <- prometheus.MustNewConstMetric(threadCountDesc,
 						prometheus.GaugeValue, float64(thr.NumThreads),
-						gname, thr.Name)
+						gname, threadName)
 					ch <- prometheus.MustNewConstMetric(threadCpuSecsDesc,
 						prometheus.CounterValue, float64(thr.CPUUserTime),
-						gname, thr.Name, "user")
+						gname, threadName, "user")
 					ch <- prometheus.MustNewConstMetric(threadCpuSecsDesc,
 						prometheus.CounterValue, float64(thr.CPUSystemTime),
-						gname, thr.Name, "system")
+						gname, threadName, "system")
 					ch <- prometheus.MustNewConstMetric(threadIoBytesDesc,
 						prometheus.CounterValue, float64(thr.ReadBytes),
-						gname, thr.Name, "read")
+						gname, threadName, "read")
 					ch <- prometheus.MustNewConstMetric(threadIoBytesDesc,
 						prometheus.CounterValue, float64(thr.WriteBytes),
-						gname, thr.Name, "write")
+						gname, threadName, "write")
 					ch <- prometheus.MustNewConstMetric(threadMajorPageFaultsDesc,
 						prometheus.CounterValue, float64(thr.MajorPageFaults),
-						gname, thr.Name)
+						gname, threadName)
 					ch <- prometheus.MustNewConstMetric(threadMinorPageFaultsDesc,
 						prometheus.CounterValue, float64(thr.MinorPageFaults),
-						gname, thr.Name)
+						gname, threadName)
 					ch <- prometheus.MustNewConstMetric(threadContextSwitchesDesc,
 						prometheus.CounterValue, float64(thr.CtxSwitchVoluntary),
-						gname, thr.Name, "voluntary")
+						gname, threadName, "voluntary")
 					ch <- prometheus.MustNewConstMetric(threadContextSwitchesDesc,
 						prometheus.CounterValue, float64(thr.CtxSwitchNonvoluntary),
-						gname, thr.Name, "nonvoluntary")
+						gname, threadName, "nonvoluntary")
 				}
 			}
 		}
@@ -352,4 +354,21 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 		prometheus.CounterValue, float64(p.scrapeProcReadErrors))
 	ch <- prometheus.MustNewConstMetric(scrapePartialErrorsDesc,
 		prometheus.CounterValue, float64(p.scrapePartialErrors))
+}
+
+func filterNonutf8Characters(s string) string {
+	if !utf8.ValidString(s) {
+		v := make([]rune, 0, len(s))
+		for i, r := range s {
+			if r == utf8.RuneError {
+				_, size := utf8.DecodeRuneInString(s[i:])
+				if size == 1 {
+					continue
+				}
+			}
+			v = append(v, r)
+		}
+		s = string(v)
+	}
+	return s
 }

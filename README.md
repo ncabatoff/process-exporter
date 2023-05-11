@@ -367,7 +367,7 @@ minimal: each time a scrape occurs, it will parse of /proc/$pid/stat and
 
 ## Dashboards
 
-An example Grafana dashboard to view the metrics is available at https://grafana.net/dashboards/249
+An example Grafana dashboard to view the metrics is available at https://grafana.com/grafana/dashboards/249-named-processes/
 
 ## Building
 

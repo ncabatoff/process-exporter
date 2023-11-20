@@ -134,7 +134,7 @@ func (g *Grouper) groups(tracked []Update) GroupByName {
 		groups[gname] = group
 	}
 
-	// Now add any groups that were observed in the past but aren't running now (or delete them, if removeDeadGroups is True).
+	// Now add any groups that were observed in the past but aren't running now (or delete them, if removeDeadGroups is true).
 	for gname, gcounts := range g.groupAccum {
 		if _, ok := groups[gname]; !ok {
 			if g.removeDeadGroups {

@@ -176,6 +176,7 @@ func main() {
 			"log debugging information to stdout")
 		showVersion = flag.Bool("version", false,
 			"print version information and exit")
+		removeDeadGroups = flag.Bool("remove-dead-groups", false, "forget process groups with no processes")
 	)
 	flag.Parse()
 
@@ -233,13 +234,14 @@ func main() {
 
 	pc, err := collector.NewProcessCollector(
 		collector.ProcessCollectorOption{
-			ProcFSPath:  *procfsPath,
-			Children:    *children,
-			Threads:     *threads,
-			GatherSMaps: *smaps,
-			Namer:       matchnamer,
-			Recheck:     *recheck,
-			Debug:       *debug,
+			ProcFSPath:       *procfsPath,
+			Children:         *children,
+			Threads:          *threads,
+			GatherSMaps:      *smaps,
+			Namer:            matchnamer,
+			Recheck:          *recheck,
+			Debug:            *debug,
+			RemoveDeadGroups: *removeDeadGroups,
 		},
 	)
 	if err != nil {

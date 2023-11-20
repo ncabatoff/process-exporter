@@ -13,10 +13,11 @@ type (
 	Grouper struct {
 		// groupAccum records the historical accumulation of a group so that
 		// we can avoid ever decreasing the counts we return.
-		groupAccum  map[string]Counts
-		tracker     *Tracker
-		threadAccum map[string]map[string]Threads
-		debug       bool
+		groupAccum       map[string]Counts
+		tracker          *Tracker
+		threadAccum      map[string]map[string]Threads
+		debug            bool
+		removeDeadGroups bool
 	}
 
 	// GroupByName maps group name to group metrics.
@@ -49,12 +50,13 @@ type (
 func lessThreads(x, y Threads) bool { return seq.Compare(x, y) < 0 }
 
 // NewGrouper creates a grouper.
-func NewGrouper(namer common.MatchNamer, trackChildren, trackThreads, alwaysRecheck, debug bool) *Grouper {
+func NewGrouper(namer common.MatchNamer, trackChildren, trackThreads, alwaysRecheck, debug bool, removeDeadGroups bool) *Grouper {
 	g := Grouper{
-		groupAccum:  make(map[string]Counts),
-		threadAccum: make(map[string]map[string]Threads),
-		tracker:     NewTracker(namer, trackChildren, alwaysRecheck, debug),
-		debug:       debug,
+		groupAccum:       make(map[string]Counts),
+		threadAccum:      make(map[string]map[string]Threads),
+		tracker:          NewTracker(namer, trackChildren, alwaysRecheck, debug),
+		debug:            debug,
+		removeDeadGroups: removeDeadGroups,
 	}
 	return &g
 }
@@ -96,10 +98,10 @@ func groupadd(grp Group, ts Update) Group {
 // These are aggregated by groupname, augmented by accumulated counts
 // from the past, and returned.  Note that while the Tracker reports
 // only what counts have changed since last cycle, Grouper.Update
-// returns counts that never decrease.  Even once the last process
-// with name X disappears, name X will still appear in the results
-// with the same counts as before; of course, all non-count metrics
-// will be zero.
+// returns counts that never decrease.  If removeDeadGroups is false,
+// then even once the last process with name X disappears, name X will
+// still appear in the results with the same counts as before; of course,
+// all non-count metrics will be zero.
 func (g *Grouper) Update(iter Iter) (CollectErrors, GroupByName, error) {
 	cerrs, tracked, err := g.tracker.Update(iter)
 	if err != nil {
@@ -132,10 +134,14 @@ func (g *Grouper) groups(tracked []Update) GroupByName {
 		groups[gname] = group
 	}
 
-	// Now add any groups that were observed in the past but aren't running now.
+	// Now add any groups that were observed in the past but aren't running now (or delete them, if removeDeadGroups is True).
 	for gname, gcounts := range g.groupAccum {
 		if _, ok := groups[gname]; !ok {
-			groups[gname] = Group{Counts: gcounts}
+			if g.removeDeadGroups {
+				delete(g.groupAccum, gname)
+			} else {
+				groups[gname] = Group{Counts: gcounts}
+			}
 		}
 	}
 

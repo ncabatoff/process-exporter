@@ -138,7 +138,7 @@ func TestGrouperProcJoin(t *testing.T) {
 }
 
 // TestGrouperNonDecreasing tests the disappearance of a process.  Its previous
-// contribution to the counts should not go away when that happens if removeEmptyGroups if false.
+// contribution to the counts should not go away when that happens if removeEmptyGroups is false.
 func TestGrouperNonDecreasing(t *testing.T) {
 	p1, p2 := 1, 2
 	n1, n2 := "g1", "g1"
@@ -181,7 +181,7 @@ func TestGrouperNonDecreasing(t *testing.T) {
 }
 
 // TestGrouperNonDecreasing tests the disappearance of a process.
-// We want the group to disappear if removeEmptyGroups if true.
+// We want the group to disappear if removeEmptyGroups is true.
 func TestGrouperRemoveEmptyGroups(t *testing.T) {
 	p1, p2 := 1, 2
 	n1, n2 := "g1", "g2"

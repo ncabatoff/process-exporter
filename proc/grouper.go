@@ -139,6 +139,7 @@ func (g *Grouper) groups(tracked []Update) GroupByName {
 		if _, ok := groups[gname]; !ok {
 			if g.removeEmptyGroups {
 				delete(g.groupAccum, gname)
+				delete(g.threadAccum, gname)
 			} else {
 				groups[gname] = Group{Counts: gcounts}
 			}

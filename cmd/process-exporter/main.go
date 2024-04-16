@@ -16,6 +16,7 @@ import (
 	"github.com/ncabatoff/process-exporter/collector"
 	"github.com/ncabatoff/process-exporter/config"
 	"github.com/prometheus/client_golang/prometheus"
+	verCollector "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/promlog"
 	promVersion "github.com/prometheus/common/version"
@@ -141,7 +142,7 @@ func (nmr *nameMapperRegex) MatchAndName(nacl common.ProcAttributes) (bool, stri
 
 func init() {
 	promVersion.Version = version
-	prometheus.MustRegister(promVersion.NewCollector("process_exporter"))
+	prometheus.MustRegister(verCollector.NewCollector("process_exporter"))
 }
 
 func main() {
@@ -271,7 +272,9 @@ func main() {
 			</html>`))
 	})
 	server := &http.Server{Addr: *listenAddress}
-	if err := web.ListenAndServe(server, *tlsConfigFile, logger); err != nil {
+	if err := web.ListenAndServe(server, &web.FlagConfig{
+		WebConfigFile: tlsConfigFile,
+	}, logger); err != nil {
 		log.Fatalf("Failed to start the server: %v", err)
 		os.Exit(1)
 	}

@@ -173,6 +173,8 @@ func main() {
 			"path to YAML web config file")
 		recheck = flag.Bool("recheck", false,
 			"recheck process names on each scrape")
+		recheckTimeLimit = flag.Duration("recheck-with-time-limit", 0,
+			"recheck processes only this much time after their start, but no longer.")
 		debug = flag.Bool("debug", false,
 			"log debugging information to stdout")
 		showVersion = flag.Bool("version", false,
@@ -232,15 +234,20 @@ func main() {
 		matchnamer = namemapper
 	}
 
+	if *recheckTimeLimit != 0 {
+		*recheck = true
+	}
+
 	pc, err := collector.NewProcessCollector(
 		collector.ProcessCollectorOption{
-			ProcFSPath:  *procfsPath,
-			Children:    *children,
-			Threads:     *threads,
-			GatherSMaps: *smaps,
-			Namer:       matchnamer,
-			Recheck:     *recheck,
-			Debug:       *debug,
+			ProcFSPath:       *procfsPath,
+			Children:         *children,
+			Threads:          *threads,
+			GatherSMaps:      *smaps,
+			Namer:            matchnamer,
+			Recheck:          *recheck,
+			RecheckTimeLimit: *recheckTimeLimit,
+			Debug:            *debug,
 		},
 	)
 	if err != nil {

@@ -280,7 +280,8 @@ func main() {
 	})
 	server := &http.Server{Addr: *listenAddress}
 	if err := web.ListenAndServe(server, &web.FlagConfig{
-		WebConfigFile: tlsConfigFile,
+		WebListenAddresses: &[]string{*listenAddress},
+		WebConfigFile:      tlsConfigFile,
 	}, logger); err != nil {
 		log.Fatalf("Failed to start the server: %v", err)
 		os.Exit(1)

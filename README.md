@@ -372,7 +372,7 @@ An example Grafana dashboard to view the metrics is available at https://grafana
 
 ## Building
 
-Requires Go 1.13 installed.
+Requires Go 1.21 (at least) installed.
 ```
 make
 ```

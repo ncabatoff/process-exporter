@@ -9,9 +9,11 @@ jobs:
           go-version: '1.22'
 
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - run: make style
       - run: make vet
       - run: make test
-      - run: make build
+      - run: make BRANCH=${{ github.head_ref || github.ref_name }} build
       - run: make integ

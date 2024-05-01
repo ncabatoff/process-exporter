@@ -127,7 +127,7 @@ func TestGrouperProcJoin(t *testing.T) {
 			},
 		},
 	}
-  
+
 	gr := NewGrouper(newNamer(n1), false, false, false, 0, false, false)
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.procs...))
@@ -213,7 +213,7 @@ func TestGrouperRemoveEmptyGroups(t *testing.T) {
 		},
 	}
 
-	gr := NewGrouper(newNamer(n1), false, false, false, 0, false, true)
+	gr := NewGrouper(newNamer(n1, n2), false, false, false, 0, false, true)
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.procs...))
 		if diff := cmp.Diff(got, tc.want); diff != "" {

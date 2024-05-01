@@ -241,15 +241,15 @@ func main() {
 
 	pc, err := collector.NewProcessCollector(
 		collector.ProcessCollectorOption{
-			ProcFSPath:       *procfsPath,
-			Children:         *children,
-			Threads:          *threads,
-			GatherSMaps:      *smaps,
-			Namer:            matchnamer,
-			Recheck:          *recheck,
-			RecheckTimeLimit: *recheckTimeLimit,
-			Debug:            *debug,
-      RemoveEmptyGroups: *removeEmptyGroups,
+			ProcFSPath:        *procfsPath,
+			Children:          *children,
+			Threads:           *threads,
+			GatherSMaps:       *smaps,
+			Namer:             matchnamer,
+			Recheck:           *recheck,
+			RecheckTimeLimit:  *recheckTimeLimit,
+			Debug:             *debug,
+			RemoveEmptyGroups: *removeEmptyGroups,
 		},
 	)
 	if err != nil {

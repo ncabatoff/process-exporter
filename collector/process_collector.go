@@ -156,15 +156,15 @@ type (
 	}
 
 	ProcessCollectorOption struct {
-		ProcFSPath       string
-		Children         bool
-		Threads          bool
-		GatherSMaps      bool
-		Namer            common.MatchNamer
-		Recheck          bool
-		RecheckTimeLimit time.Duration
-		Debug            bool
-    RemoveEmptyGroups bool
+		ProcFSPath        string
+		Children          bool
+		Threads           bool
+		GatherSMaps       bool
+		Namer             common.MatchNamer
+		Recheck           bool
+		RecheckTimeLimit  time.Duration
+		Debug             bool
+		RemoveEmptyGroups bool
 	}
 
 	NamedProcessCollector struct {

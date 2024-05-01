@@ -1,14 +1,14 @@
 builds:
   - main: cmd/process-exporter/main.go
     binary: process-exporter
-    flags: -tags netgo
     ldflags:
       - -s -w
       - -X github.com/prometheus/common/version.BuildDate={{.Date}}
       - -X github.com/prometheus/common/version.BuildUser=goreleaser
       - -X github.com/prometheus/common/version.Revision={{.FullCommit}}
       - -X main.version={{.Version}}
-
+    env:
+      - CGO_ENABLED=0
     goos:
       - linux
     goarch:

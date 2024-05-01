@@ -2,6 +2,7 @@ package collector
 
 import (
 	"log"
+	"time"
 
 	common "github.com/ncabatoff/process-exporter"
 	"github.com/ncabatoff/process-exporter/proc"
@@ -155,14 +156,15 @@ type (
 	}
 
 	ProcessCollectorOption struct {
-		ProcFSPath        string
-		Children          bool
-		Threads           bool
-		GatherSMaps       bool
-		Namer             common.MatchNamer
-		Recheck           bool
-		Debug             bool
-		RemoveEmptyGroups bool
+		ProcFSPath       string
+		Children         bool
+		Threads          bool
+		GatherSMaps      bool
+		Namer            common.MatchNamer
+		Recheck          bool
+		RecheckTimeLimit time.Duration
+		Debug            bool
+    RemoveEmptyGroups bool
 	}
 
 	NamedProcessCollector struct {
@@ -187,7 +189,7 @@ func NewProcessCollector(options ProcessCollectorOption) (*NamedProcessCollector
 	fs.GatherSMaps = options.GatherSMaps
 	p := &NamedProcessCollector{
 		scrapeChan: make(chan scrapeRequest),
-		Grouper:    proc.NewGrouper(options.Namer, options.Children, options.Threads, options.Recheck, options.Debug, options.RemoveEmptyGroups),
+		Grouper:    proc.NewGrouper(options.Namer, options.Children, options.Threads, options.Recheck, options.RecheckTimeLimit, options.Debug, options.RemoveEmptyGroups),
 		source:     fs,
 		threads:    options.Threads,
 		smaps:      options.GatherSMaps,

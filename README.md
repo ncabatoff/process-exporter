@@ -46,7 +46,8 @@ as well as group name.
 re-evaluated. This is disabled by default as an optimization, but since
 processes can choose to change their names, this may result in a process
 falling into the wrong group if we happen to see it for the first time before
-it's assumed its proper name.
+it's assumed its proper name. You can use -recheck-with-time-limit to enable this
+feature only for a specific duration after process starts.
 
 -procnames is intended as a quick alternative to using a config file.  Details
 in the following section.
@@ -371,7 +372,7 @@ An example Grafana dashboard to view the metrics is available at https://grafana
 
 ## Building
 
-Requires Go 1.13 installed.
+Requires Go 1.21 (at least) installed.
 ```
 make
 ```

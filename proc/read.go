@@ -394,18 +394,13 @@ func (p *proccache) GetStatic() (Static, error) {
 		}
 	}
 
-	effectiveUID, err := strconv.ParseInt(status.UIDs[1], 10, 64)
-	if err != nil {
-		return Static{}, err
-	}
-
 	return Static{
 		Name:         stat.Comm,
 		Cmdline:      cmdline,
 		Cgroups:      cgroupsStr,
 		ParentPid:    stat.PPID,
 		StartTime:    startTime,
-		EffectiveUID: int(effectiveUID),
+		EffectiveUID: int(status.UIDs[1]),
 	}, nil
 }
 

@@ -272,22 +272,48 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 		}
 	}
 
-	var newProc *IDInfo
+	var static Static
+
+	// the exec name was changed,need recal the proc info
+	var recheck_name bool
 	if known {
-		last.update(metrics, updateTime, &cerrs, threads)
-	} else {
-		static, err := proc.GetStatic()
+		if d := time.Now().UTC().Sub(last.static.StartTime); d < 1*time.Minute {
+			log.Printf("the proc id:%+v was running %+v", procID, d)
+			recheck_name = true
+		}
+	}
+	if !known || recheck_name {
+		static, err = proc.GetStatic()
 		if err != nil {
 			if t.debug {
 				log.Printf("error reading static details for %+v: %v", procID, err)
 			}
 			return nil, cerrs
 		}
+
+		if recheck_name && last.static.Name != static.Name {
+			log.Printf("last info=%+v now info=%+v", last.static, static)
+			known = false // the exec name was changed,need recal the proc info
+		} else if recheck_name {
+			log.Println("the proc stat is not change,pid=", proc.GetPid())
+		}
+	}
+
+	var newProc *IDInfo
+	if known {
+		last.update(metrics, updateTime, &cerrs, threads)
+	} else {
+		// static, err := proc.GetStatic()
+		// if err != nil {
+		// 	if t.debug {
+		// 		log.Printf("error reading static details for %+v: %v", procID, err)
+		// 	}
+		// 	return nil, cerrs
+		// }
 		newProc = &IDInfo{procID, static, metrics, threads}
 		if t.debug {
 			log.Printf("found new proc: %s", newProc)
 		}
-
 		// Is this a new process with the same pid as one we already know?
 		// Then delete it from the known map, otherwise the cleanup in Update()
 		// will remove the ProcIds entry we're creating here.

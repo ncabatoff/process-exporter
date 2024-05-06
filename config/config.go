@@ -55,6 +55,7 @@ type (
 		ExeBase   string
 		ExeFull   string
 		Username  string
+		Cwd       string
 		PID       int
 		StartTime time.Time
 		Matches   map[string]string
@@ -124,6 +125,7 @@ func (m *matchNamer) MatchAndName(nacl common.ProcAttributes) (bool, string) {
 		Username:  nacl.Username,
 		PID:       nacl.PID,
 		StartTime: nacl.StartTime,
+		Cwd:       nacl.Cwd,
 	})
 	return true, buf.String()
 }

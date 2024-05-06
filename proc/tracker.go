@@ -432,6 +432,7 @@ func (t *Tracker) Update(iter Iter) (CollectErrors, []Update, error) {
 			Cmdline:   idinfo.Cmdline,
 			Cgroups:   idinfo.Cgroups,
 			Username:  t.lookupUid(idinfo.EffectiveUID),
+			Cwd:       idinfo.Cwd,
 			PID:       idinfo.Pid,
 			StartTime: idinfo.StartTime,
 		}

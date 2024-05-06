@@ -11,6 +11,7 @@ type (
 		Cmdline   []string
 		Cgroups   []string
 		Username  string
+		Cwd       string
 		PID       int
 		StartTime time.Time
 	}

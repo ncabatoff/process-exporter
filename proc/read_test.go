@@ -64,6 +64,7 @@ func TestReadFixture(t *testing.T) {
 		Name:         "process-exporte",
 		Cmdline:      []string{"./process-exporter", "-procnames", "bash"},
 		Cgroups:      []string{"/system.slice/docker-8dde0b0d6e919baef8d635cd9399b22639ed1e400eaec1b1cb94ff3b216cf3c3.scope"},
+		Cwd:          "/tmp",
 		ParentPid:    10884,
 		StartTime:    stime,
 		EffectiveUID: 1000,

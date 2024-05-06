@@ -1,7 +1,9 @@
 package proc
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -31,6 +33,7 @@ type (
 		Name         string
 		Cmdline      []string
 		Cgroups      []string
+		Cwd          string
 		ParentPid    int
 		StartTime    time.Time
 		EffectiveUID int
@@ -137,6 +140,7 @@ type (
 		status  *procfs.ProcStatus
 		cmdline []string
 		cgroups []procfs.Cgroup
+		cwd     string
 		io      *procfs.ProcIO
 		fs      *FS
 		wchan   *string
@@ -313,6 +317,21 @@ func (p *proccache) getCgroups() ([]procfs.Cgroup, error) {
 	return p.cgroups, nil
 }
 
+func (p *proccache) getCwd() (string, error) {
+	if p.cwd == "" {
+		cwd, err := p.Cwd()
+
+		if err != nil && errors.Is(err, fs.ErrPermission) {
+			cwd = "-"
+		} else if err != nil {
+			return "", err
+		}
+		p.cwd = cwd
+	}
+
+	return p.cwd, nil
+}
+
 // GetProcID implements Proc.
 func (p *proccache) GetProcID() (ID, error) {
 	if p.procid == nil {
@@ -394,10 +413,17 @@ func (p *proccache) GetStatic() (Static, error) {
 		}
 	}
 
+	// /proc/<pid>/cwd is normally world-readable.
+	cwd, err := p.getCwd()
+	if err != nil {
+		return Static{}, err
+	}
+
 	return Static{
 		Name:         stat.Comm,
 		Cmdline:      cmdline,
 		Cgroups:      cgroupsStr,
+		Cwd:          cwd,
 		ParentPid:    stat.PPID,
 		StartTime:    startTime,
 		EffectiveUID: int(status.UIDs[1]),

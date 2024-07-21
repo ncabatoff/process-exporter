@@ -73,7 +73,7 @@ func TestGrouperBasic(t *testing.T) {
 		},
 	}
 
-	gr := NewGrouper(newNamer(n1, n2), false, false, false, 0, false)
+	gr := NewGrouper(newNamer(n1, n2), false, false, false, 0, false, false)
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.procs...))
 		if diff := cmp.Diff(got, tc.want); diff != "" {
@@ -128,7 +128,7 @@ func TestGrouperProcJoin(t *testing.T) {
 		},
 	}
 
-	gr := NewGrouper(newNamer(n1), false, false, false, 0, false)
+	gr := NewGrouper(newNamer(n1), false, false, false, 0, false, false)
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.procs...))
 		if diff := cmp.Diff(got, tc.want); diff != "" {
@@ -138,7 +138,7 @@ func TestGrouperProcJoin(t *testing.T) {
 }
 
 // TestGrouperNonDecreasing tests the disappearance of a process.  Its previous
-// contribution to the counts should not go away when that happens.
+// contribution to the counts should not go away when that happens if removeEmptyGroups is false.
 func TestGrouperNonDecreasing(t *testing.T) {
 	p1, p2 := 1, 2
 	n1, n2 := "g1", "g1"
@@ -171,7 +171,49 @@ func TestGrouperNonDecreasing(t *testing.T) {
 		},
 	}
 
-	gr := NewGrouper(newNamer(n1), false, false, false, 0, false)
+	gr := NewGrouper(newNamer(n1), false, false, false, 0, false, false)
+	for i, tc := range tests {
+		got := rungroup(t, gr, procInfoIter(tc.procs...))
+		if diff := cmp.Diff(got, tc.want); diff != "" {
+			t.Errorf("%d: curgroups differs: (-got +want)\n%s", i, diff)
+		}
+	}
+}
+
+// TestGrouperNonDecreasing tests the disappearance of a process.
+// We want the group to disappear if removeEmptyGroups is true.
+func TestGrouperRemoveEmptyGroups(t *testing.T) {
+	p1, p2 := 1, 2
+	n1, n2 := "g1", "g2"
+	starttime := time.Unix(0, 0).UTC()
+
+	tests := []struct {
+		procs []IDInfo
+		want  GroupByName
+	}{
+		{
+			[]IDInfo{
+				piinfo(p1, n1, Counts{3, 4, 5, 6, 7, 8, 0, 0}, Memory{3, 4, 0, 0, 0}, Filedesc{4, 400}, 2),
+				piinfo(p2, n2, Counts{1, 1, 1, 1, 1, 1, 0, 0}, Memory{1, 2, 0, 0, 0}, Filedesc{40, 400}, 3),
+			},
+			GroupByName{
+				n1: Group{Counts{}, States{}, msi{}, 1, Memory{3, 4, 0, 0, 0}, starttime, 4, 0.01, 2, nil},
+				n2: Group{Counts{}, States{}, msi{}, 1, Memory{1, 2, 0, 0, 0}, starttime, 40, 0.1, 3, nil},
+			},
+		}, {
+			[]IDInfo{
+				piinfo(p1, n1, Counts{4, 5, 6, 7, 8, 9, 0, 0}, Memory{1, 5, 0, 0, 0}, Filedesc{4, 400}, 2),
+			},
+			GroupByName{
+				n1: Group{Counts{1, 1, 1, 1, 1, 1, 0, 0}, States{}, msi{}, 1, Memory{1, 5, 0, 0, 0}, starttime, 4, 0.01, 2, nil},
+			},
+		}, {
+			[]IDInfo{},
+			GroupByName{},
+		},
+	}
+
+	gr := NewGrouper(newNamer(n1, n2), false, false, false, 0, false, true)
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.procs...))
 		if diff := cmp.Diff(got, tc.want); diff != "" {
@@ -224,7 +266,7 @@ func TestGrouperThreads(t *testing.T) {
 	}
 
 	opts := cmpopts.SortSlices(lessThreads)
-	gr := NewGrouper(newNamer(n), false, true, false, 0, false)
+	gr := NewGrouper(newNamer(n), false, true, false, 0, false, false)
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.proc))
 		if diff := cmp.Diff(got, tc.want, opts); diff != "" {

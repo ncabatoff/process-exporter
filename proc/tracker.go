@@ -447,14 +447,15 @@ func (t *Tracker) Update(iter Iter) (CollectErrors, []Update, error) {
 	}
 
 	// Step 2: track any untracked new proc that should be tracked because its parent is tracked.
-	if t.trackChildren {
-		for _, idinfo := range untracked {
-			if _, ok := t.tracked[idinfo.ID]; ok {
-				// Already tracked or ignored in an earlier iteration
-				continue
-			}
-
+	for _, idinfo := range untracked {
+		if _, ok := t.tracked[idinfo.ID]; ok {
+			// Already tracked or ignored in an earlier iteration
+			continue
+		}
+		if t.trackChildren {
 			t.checkAncestry(idinfo, untracked)
+		} else {
+			t.ignore(idinfo.ID, idinfo.Static.StartTime)
 		}
 	}
 

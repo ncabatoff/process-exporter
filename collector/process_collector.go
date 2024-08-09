@@ -1,7 +1,11 @@
 package collector
 
 import (
+	"bufio"
 	"log"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	common "github.com/ncabatoff/process-exporter"
@@ -50,6 +54,12 @@ var (
 		"namedprocess_namegroup_context_switches_total",
 		"Context switches",
 		[]string{"groupname", "ctxswitchtype"},
+		nil)
+
+	mmapCountDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_mmap_count",
+		"maximum number of mmap entries in use",
+		[]string{"groupname"},
 		nil)
 
 	membytesDesc = prometheus.NewDesc(
@@ -106,6 +116,12 @@ var (
 		nil,
 		nil)
 
+	maxMapCountDesc = prometheus.NewDesc(
+		"namedprocess_max_map_count",
+		"maximum number of map entries allowed per process",
+		nil,
+		nil)
+
 	threadWchanDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_threads_wchan",
 		"Number of threads in this group waiting on each wchan",
@@ -159,6 +175,7 @@ type (
 		ProcFSPath        string
 		Children          bool
 		Threads           bool
+		GatherMMaps       bool
 		GatherSMaps       bool
 		Namer             common.MatchNamer
 		Recheck           bool
@@ -172,7 +189,9 @@ type (
 		*proc.Grouper
 		threads              bool
 		smaps                bool
+		mmaps                bool
 		source               proc.Source
+		maxMapCount          int
 		scrapeErrors         int
 		scrapeProcReadErrors int
 		scrapePartialErrors  int
@@ -186,12 +205,14 @@ func NewProcessCollector(options ProcessCollectorOption) (*NamedProcessCollector
 		return nil, err
 	}
 
+	fs.GatherMMaps = options.GatherMMaps
 	fs.GatherSMaps = options.GatherSMaps
 	p := &NamedProcessCollector{
 		scrapeChan: make(chan scrapeRequest),
 		Grouper:    proc.NewGrouper(options.Namer, options.Children, options.Threads, options.Recheck, options.RecheckTimeLimit, options.Debug, options.RemoveEmptyGroups),
 		source:     fs,
 		threads:    options.Threads,
+		mmaps:      options.GatherMMaps,
 		smaps:      options.GatherSMaps,
 		debug:      options.Debug,
 	}
@@ -253,6 +274,25 @@ func (p *NamedProcessCollector) start() {
 	}
 }
 
+func GetMaxMapCount() (int, error) {
+	r, err := os.Open("/proc/sys/vm/max_map_count")
+	if err != nil {
+		return 0, err
+	}
+	defer r.Close()
+	reader := bufio.NewReader(r)
+	rdln, err := reader.ReadString('\n')
+	if err != nil {
+		return 0, err
+	}
+	line := strings.Trim(rdln, "\n")
+	val, err := strconv.Atoi(line)
+	if err != nil {
+		return 0, err
+	}
+	return val, nil
+}
+
 func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 	permErrs, groups, err := p.Update(p.source.AllProcs())
 	p.scrapePartialErrors += permErrs.Partial
@@ -309,6 +349,11 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 					prometheus.GaugeValue, float64(count), gname, wchan)
 			}
 
+			if p.mmaps {
+				ch <- prometheus.MustNewConstMetric(mmapCountDesc,
+					prometheus.GaugeValue, float64(gcounts.Memory.MmapCount), gname)
+			}
+
 			if p.smaps {
 				ch <- prometheus.MustNewConstMetric(membytesDesc,
 					prometheus.GaugeValue, float64(gcounts.Memory.ProportionalBytes), gname, "proportionalResident")
@@ -349,6 +394,16 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 			}
 		}
 	}
+	if p.mmaps {
+		max_map_count, err := GetMaxMapCount()
+		if err == nil {
+			p.maxMapCount = max_map_count
+		} else {
+			p.scrapePartialErrors++
+		}
+	}
+	ch <- prometheus.MustNewConstMetric(maxMapCountDesc,
+		prometheus.GaugeValue, float64(p.maxMapCount))
 	ch <- prometheus.MustNewConstMetric(scrapeErrorsDesc,
 		prometheus.CounterValue, float64(p.scrapeErrors))
 	ch <- prometheus.MustNewConstMetric(scrapeProcReadErrorsDesc,

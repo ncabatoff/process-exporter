@@ -1,7 +1,9 @@
 package proc
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -53,6 +55,7 @@ type (
 		ResidentBytes         uint64
 		VirtualBytes          uint64
 		VmSwapBytes           uint64
+		MmapCount             uint64
 		ProportionalBytes     uint64
 		ProportionalSwapBytes uint64
 	}
@@ -193,6 +196,7 @@ type (
 		procfs.FS
 		BootTime    uint64
 		MountPoint  string
+		GatherMMaps bool
 		GatherSMaps bool
 		debug       bool
 	}
@@ -464,6 +468,30 @@ func (p proc) GetStates() (States, error) {
 	return s, nil
 }
 
+func (p proc) GetMmapCount() (uint64, error) {
+	buf := make([]byte, 32*1024)
+	count := 0
+	lineSep := []byte{'\n'}
+	id, err := p.GetProcID()
+	if err != nil {
+		return 0, err
+	}
+	r, _ := os.Open(fmt.Sprintf("/proc/%d/maps", id.Pid))
+	defer r.Close()
+
+	for {
+		c, err := r.Read(buf)
+		count += bytes.Count(buf[:c], lineSep)
+
+		switch {
+		case err == io.EOF:
+			return uint64(count), nil
+		case err != nil:
+			return 0, err
+		}
+	}
+}
+
 // GetMetrics returns the current metrics for the proc.  The results are
 // not cached.
 func (p proc) GetMetrics() (Metrics, int, error) {
@@ -504,6 +532,15 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 		ResidentBytes: uint64(stat.ResidentMemory()),
 		VirtualBytes:  uint64(stat.VirtualMemory()),
 		VmSwapBytes:   uint64(status.VmSwap),
+	}
+
+	if p.proccache.fs.GatherMMaps {
+		count, err := p.GetMmapCount()
+		if err == nil {
+			memory.MmapCount = count
+		} else {
+			softerrors |= 1
+		}
 	}
 
 	if p.proccache.fs.GatherSMaps {
@@ -592,7 +629,7 @@ func NewFS(mountPoint string, debug bool) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FS{fs, stat.BootTime, mountPoint, false, debug}, nil
+	return &FS{fs, stat.BootTime, mountPoint, false, false, debug}, nil
 }
 
 func (fs *FS) threadFs(pid int) (*FS, error) {
@@ -601,7 +638,7 @@ func (fs *FS) threadFs(pid int) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FS{tfs, fs.BootTime, mountPoint, fs.GatherSMaps, false}, nil
+	return &FS{tfs, fs.BootTime, mountPoint, fs.GatherMMaps, fs.GatherSMaps, false}, nil
 }
 
 // AllProcs implements Source.

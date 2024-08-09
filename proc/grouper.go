@@ -68,6 +68,9 @@ func groupadd(grp Group, ts Update) Group {
 	grp.Memory.ResidentBytes += ts.Memory.ResidentBytes
 	grp.Memory.VirtualBytes += ts.Memory.VirtualBytes
 	grp.Memory.VmSwapBytes += ts.Memory.VmSwapBytes
+	if grp.Memory.MmapCount < ts.Memory.MmapCount {
+		grp.Memory.MmapCount = ts.Memory.MmapCount
+	}
 	grp.Memory.ProportionalBytes += ts.Memory.ProportionalBytes
 	grp.Memory.ProportionalSwapBytes += ts.Memory.ProportionalSwapBytes
 	if ts.Filedesc.Open != -1 {

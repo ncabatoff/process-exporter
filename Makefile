@@ -39,7 +39,7 @@ vet:
 
 build:
 	@echo ">> building code"
-	cd cmd/process-exporter; CGO_ENABLED=0 go build -ldflags "$(VERSION_LDFLAGS)" -o ../../process-exporter -a -tags netgo
+	cd cmd/process-exporter; CGO_ENABLED=0 go build -trimpath -ldflags "$(VERSION_LDFLAGS)" -o ../../process-exporter -a -tags netgo
 
 smoke:
 	@echo ">> smoke testing process-exporter"
@@ -64,10 +64,10 @@ docker:
 	docker run --rm --volumes-from configs "$(DOCKER_IMAGE_NAME):$(TAG_VERSION)" $(SMOKE_TEST)
 
 dockertest:
-	docker run --rm -it -v `pwd`:/go/src/github.com/ncabatoff/process-exporter golang:1.22  make -C /go/src/github.com/ncabatoff/process-exporter test
+	docker run --rm -it -v `pwd`:/go/src/github.com/ncabatoff/process-exporter golang:1.23  make -C /go/src/github.com/ncabatoff/process-exporter test
 
 dockerinteg:
-	docker run --rm -it -v `pwd`:/go/src/github.com/ncabatoff/process-exporter golang:1.22  make -C /go/src/github.com/ncabatoff/process-exporter build integ
+	docker run --rm -it -v `pwd`:/go/src/github.com/ncabatoff/process-exporter golang:1.23  make -C /go/src/github.com/ncabatoff/process-exporter build integ
 
 .PHONY: update-go-deps
 update-go-deps:

@@ -107,7 +107,7 @@ type (
 	// }
 
 	// Proc wraps the details of the underlying procfs-reading library.
-	// Any of these methods may fail if the process has disapeared.
+	// Any of these methods may fail if the process has disappeared.
 	// We try to return as much as possible rather than an error, e.g.
 	// if some /proc files are unreadable.
 	Proc interface {
@@ -194,7 +194,6 @@ type (
 		BootTime    uint64
 		MountPoint  string
 		GatherSMaps bool
-		debug       bool
 	}
 )
 
@@ -279,7 +278,7 @@ func (p *proccache) GetPid() int {
 
 func (p *proccache) getStat() (procfs.ProcStat, error) {
 	if p.stat == nil {
-		stat, err := p.Proc.NewStat()
+		stat, err := p.Stat()
 		if err != nil {
 			return procfs.ProcStat{}, err
 		}
@@ -490,7 +489,7 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 		softerrors |= 1
 	}
 
-	limits, err := p.Proc.NewLimits()
+	limits, err := p.Limits()
 	if err != nil {
 		return Metrics{}, 0, err
 	}
@@ -583,16 +582,16 @@ const userHZ = 100
 
 // NewFS returns a new FS mounted under the given mountPoint. It will error
 // if the mount point can't be read.
-func NewFS(mountPoint string, debug bool) (*FS, error) {
+func NewFS(mountPoint string) (*FS, error) {
 	fs, err := procfs.NewFS(mountPoint)
 	if err != nil {
 		return nil, err
 	}
-	stat, err := fs.NewStat()
+	stat, err := fs.Stat()
 	if err != nil {
 		return nil, err
 	}
-	return &FS{fs, stat.BootTime, mountPoint, false, debug}, nil
+	return &FS{fs, stat.BootTime, mountPoint, false}, nil
 }
 
 func (fs *FS) threadFs(pid int) (*FS, error) {
@@ -601,14 +600,14 @@ func (fs *FS) threadFs(pid int) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FS{tfs, fs.BootTime, mountPoint, fs.GatherSMaps, false}, nil
+	return &FS{tfs, fs.BootTime, mountPoint, fs.GatherSMaps}, nil
 }
 
 // AllProcs implements Source.
 func (fs *FS) AllProcs() Iter {
 	procs, err := fs.FS.AllProcs()
 	if err != nil {
-		err = fmt.Errorf("Error reading procs: %v", err)
+		err = fmt.Errorf("error reading procs: %v", err)
 	}
 	return &procIterator{procs: procfsprocs{procs, fs}, err: err, idx: -1}
 }

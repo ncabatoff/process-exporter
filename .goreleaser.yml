@@ -1,6 +1,9 @@
+version: 2
 builds:
   - main: cmd/process-exporter/main.go
     binary: process-exporter
+    flags:
+      - -trimpath
     ldflags:
       - -s -w
       - -X github.com/prometheus/common/version.BuildDate={{.Date}}

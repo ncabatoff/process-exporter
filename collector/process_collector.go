@@ -2,6 +2,7 @@ package collector
 
 import (
 	"log"
+	"log/slog"
 	"time"
 
 	common "github.com/ncabatoff/process-exporter"
@@ -163,7 +164,6 @@ type (
 		Namer             common.MatchNamer
 		Recheck           bool
 		RecheckTimeLimit  time.Duration
-		Debug             bool
 		RemoveEmptyGroups bool
 	}
 
@@ -176,12 +176,12 @@ type (
 		scrapeErrors         int
 		scrapeProcReadErrors int
 		scrapePartialErrors  int
-		debug                bool
+		logger               *slog.Logger
 	}
 )
 
-func NewProcessCollector(options ProcessCollectorOption) (*NamedProcessCollector, error) {
-	fs, err := proc.NewFS(options.ProcFSPath, options.Debug)
+func NewProcessCollector(options ProcessCollectorOption, logger *slog.Logger) (*NamedProcessCollector, error) {
+	fs, err := proc.NewFS(options.ProcFSPath)
 	if err != nil {
 		return nil, err
 	}
@@ -189,18 +189,16 @@ func NewProcessCollector(options ProcessCollectorOption) (*NamedProcessCollector
 	fs.GatherSMaps = options.GatherSMaps
 	p := &NamedProcessCollector{
 		scrapeChan: make(chan scrapeRequest),
-		Grouper:    proc.NewGrouper(options.Namer, options.Children, options.Threads, options.Recheck, options.RecheckTimeLimit, options.Debug, options.RemoveEmptyGroups),
+		Grouper:    proc.NewGrouper(options.Namer, options.Children, options.Threads, options.Recheck, options.RecheckTimeLimit, options.RemoveEmptyGroups, logger),
 		source:     fs,
 		threads:    options.Threads,
 		smaps:      options.GatherSMaps,
-		debug:      options.Debug,
+		logger:     logger,
 	}
 
 	colErrs, _, err := p.Update(p.source.AllProcs())
 	if err != nil {
-		if options.Debug {
-			log.Print(err)
-		}
+		p.logger.Debug("error reading procs", "error", err.Error())
 		return nil, err
 	}
 	p.scrapePartialErrors += colErrs.Partial

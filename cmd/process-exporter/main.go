@@ -1,9 +1,7 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -11,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/ncabatoff/fakescraper"
 	common "github.com/ncabatoff/process-exporter"
 	"github.com/ncabatoff/process-exporter/collector"
@@ -18,9 +17,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	verCollector "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/common/promlog"
+	"github.com/prometheus/common/promslog"
+
+	"github.com/prometheus/common/promslog/flag"
 	promVersion "github.com/prometheus/common/version"
 	"github.com/prometheus/exporter-toolkit/web"
+	"github.com/prometheus/exporter-toolkit/web/kingpinflag"
 )
 
 // Version is set at build time use ldflags.
@@ -30,31 +32,31 @@ func printManual() {
 	fmt.Print(`Usage:
   process-exporter [options] -config.path filename.yml
 
-or 
+or
 
   process-exporter [options] -procnames name1,...,nameN [-namemapping k1,v1,...,kN,vN]
 
 The recommended option is to use a config file, but for convenience and
 backwards compatibility the -procnames/-namemapping options exist as an
 alternative.
- 
+
 The -children option (default:true) makes it so that any process that otherwise
 isn't part of its own group becomes part of the first group found (if any) when
-walking the process tree upwards.  In other words, resource usage of
+walking the process tree upwards. In other words, resource usage of
 subprocesses is added to their parent's usage unless the subprocess identifies
 as a different group name.
 
 Command-line process selection (procnames/namemapping):
 
   Every process not in the procnames list is ignored.  Otherwise, all processes
-  found are reported on as a group based on the process name they share. 
+  found are reported on as a group based on the process name they share.
   Here 'process name' refers to the value found in the second field of
   /proc/<pid>/stat, which is truncated at 15 chars.
 
   The -namemapping option allows assigning a group name based on a combination of
-  the process name and command line.  For example, using 
+  the process name and command line. For example, using
 
-    -namemapping "python2,([^/]+)\.py,java,-jar\s+([^/]+).jar" 
+    -namemapping "python2,([^/]+)\.py,java,-jar\s+([^/]+).jar"
 
   will make it so that each different python2 and java -jar invocation will be
   tracked with distinct metrics.  Processes whose remapped name is absent from
@@ -72,7 +74,6 @@ Config file process selection (filename.yml):
 
   See README.md.
 ` + "\n")
-
 }
 
 type (
@@ -147,49 +148,33 @@ func init() {
 
 func main() {
 	var (
-		listenAddress = flag.String("web.listen-address", ":9256",
-			"Address on which to expose metrics and web interface.")
-		metricsPath = flag.String("web.telemetry-path", "/metrics",
-			"Path under which to expose metrics.")
-		onceToStdoutDelay = flag.Duration("once-to-stdout-delay", 0,
-			"Don't bind, just wait this much time, print the metrics once to stdout, and exit")
-		procNames = flag.String("procnames", "",
-			"comma-separated list of process names to monitor")
-		procfsPath = flag.String("procfs", "/proc",
-			"path to read proc data from")
-		nameMapping = flag.String("namemapping", "",
-			"comma-separated list, alternating process name and capturing regex to apply to cmdline")
-		children = flag.Bool("children", true,
-			"if a proc is tracked, track with it any children that aren't part of their own group")
-		threads = flag.Bool("threads", true,
-			"report on per-threadname metrics as well")
-		smaps = flag.Bool("gather-smaps", true,
-			"gather metrics from smaps file, which contains proportional resident memory size")
-		man = flag.Bool("man", false,
-			"print manual")
-		configPath = flag.String("config.path", "",
-			"path to YAML config file")
-		tlsConfigFile = flag.String("web.config.file", "",
-			"path to YAML web config file")
-		recheck = flag.Bool("recheck", false,
-			"recheck process names on each scrape")
-		recheckTimeLimit = flag.Duration("recheck-with-time-limit", 0,
-			"recheck processes only this much time after their start, but no longer.")
-		debug = flag.Bool("debug", false,
-			"log debugging information to stdout")
-		showVersion = flag.Bool("version", false,
-			"print version information and exit")
-		removeEmptyGroups = flag.Bool("remove-empty-groups", false, "forget process groups with no processes")
+		webConfig         = kingpinflag.AddFlags(kingpin.CommandLine, ":9256")
+		metricsPath       = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").Default("/metrics").String()
+		onceToStdoutDelay = kingpin.Flag("once-to-stdout-delay", "If set, will collect metrics once and print them to stdout after the given delay.").Default("0s").Duration()
+		procNames         = kingpin.Flag("procnames", "comma-separated list of process names to monitor").String()
+		procfsPath        = kingpin.Flag("procfs", "path to read proc data from").Default("/proc").String()
+		nameMapping       = kingpin.Flag("namemapping", "comma-separated list, alternating process name and capturing regex to apply to cmdline").String()
+		children          = kingpin.Flag("children", "if a proc is tracked, track with it any children that aren't part of their own group").Default("true").Bool()
+		threads           = kingpin.Flag("threads", "report on per-threadname metrics as well").Default("true").Bool()
+		smaps             = kingpin.Flag("gather-smaps", "gather metrics from smaps file, which contains proportional resident memory size").Bool()
+		man               = kingpin.Flag("man", "print manual").Bool()
+		configPath        = kingpin.Flag("config.path", "path to YAML config file").String()
+		recheck           = kingpin.Flag("recheck", "recheck process names on each scrape").Bool()
+		recheckTimeLimit  = kingpin.Flag("recheck-with-time-limit", "recheck processes only this much time after their start, but no longer.").Duration()
+		removeEmptyGroups = kingpin.Flag("remove-empty-groups", "forget process groups with no processes").Bool()
 	)
-	flag.Parse()
 
-	promlogConfig := &promlog.Config{}
-	logger := promlog.New(promlogConfig)
+	promslogConfig := &promslog.Config{}
 
-	if *showVersion {
-		fmt.Printf("%s\n", promVersion.Print("process-exporter"))
-		os.Exit(0)
-	}
+	flag.AddFlags(kingpin.CommandLine, promslogConfig)
+	kingpin.Version(promVersion.Print("process-exporter"))
+	kingpin.HelpFlag.Short('h')
+
+	kingpin.Parse()
+	logger := promslog.New(promslogConfig)
+
+	logger.Info("process-exporter", "version", promVersion.Info())
+	logger.Info("build context", "build_context", promVersion.BuildContext())
 
 	if *man {
 		printManual()
@@ -200,22 +185,23 @@ func main() {
 
 	if *configPath != "" {
 		if *nameMapping != "" || *procNames != "" {
-			log.Fatalf("-config.path cannot be used with -namemapping or -procnames")
+			logger.Error("-config.path cannot be used with -namemapping or -procnames")
+			os.Exit(1)
 		}
 
-		cfg, err := config.ReadFile(*configPath, *debug)
+		cfg, err := config.ReadFile(*configPath, logger)
 		if err != nil {
-			log.Fatalf("error reading config file %q: %v", *configPath, err)
+			logger.Error("error reading config file", "config path", *configPath, "error", err.Error())
+			os.Exit(1)
 		}
-		log.Printf("Reading metrics from %s based on %q", *procfsPath, *configPath)
+		logger.Info("Reading metrics", "procfs path", *procfsPath, "config path", *configPath)
 		matchnamer = cfg.MatchNamers
-		if *debug {
-			log.Printf("using config matchnamer: %v", cfg.MatchNamers)
-		}
+		logger.Debug("using config matchnamer", "config", cfg.MatchNamers)
 	} else {
 		namemapper, err := parseNameMapper(*nameMapping)
 		if err != nil {
-			log.Fatalf("Error parsing -namemapping argument '%s': %v", *nameMapping, err)
+			logger.Error("Error parsing -namemapping argument", "arg", *nameMapping, "error", err.Error())
+			os.Exit(1)
 		}
 
 		var names []string
@@ -228,10 +214,8 @@ func main() {
 			}
 		}
 
-		log.Printf("Reading metrics from %s for procnames: %v", *procfsPath, names)
-		if *debug {
-			log.Printf("using cmdline matchnamer: %v", namemapper)
-		}
+		logger.Info("Reading metrics", "procfs path", *procfsPath, "procnames", names)
+		logger.Debug("using cmdline matchnamer", "cmdline", namemapper)
 		matchnamer = namemapper
 	}
 
@@ -248,12 +232,13 @@ func main() {
 			Namer:             matchnamer,
 			Recheck:           *recheck,
 			RecheckTimeLimit:  *recheckTimeLimit,
-			Debug:             *debug,
 			RemoveEmptyGroups: *removeEmptyGroups,
 		},
+		logger,
 	)
 	if err != nil {
-		log.Fatalf("Error initializing: %v", err)
+		logger.Error("Error initializing", "error", err.Error())
+		os.Exit(1)
 	}
 
 	prometheus.MustRegister(pc)
@@ -280,12 +265,9 @@ func main() {
 			</body>
 			</html>`))
 	})
-	server := &http.Server{Addr: *listenAddress}
-	if err := web.ListenAndServe(server, &web.FlagConfig{
-		WebListenAddresses: &[]string{*listenAddress},
-		WebConfigFile:      tlsConfigFile,
-	}, logger); err != nil {
-		log.Fatalf("Failed to start the server: %v", err)
+	server := &http.Server{}
+	if err := web.ListenAndServe(server, webConfig, logger); err != nil {
+		logger.Error("Failed to start the server", "error", err.Error())
 		os.Exit(1)
 	}
 }

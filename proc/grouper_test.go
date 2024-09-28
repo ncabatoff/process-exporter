@@ -1,18 +1,14 @@
 package proc
 
 import (
+	"log/slog"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
-
-type grouptest struct {
-	grouper *Grouper
-	procs   Iter
-	want    GroupByName
-}
 
 //func (gt grouptest) run(c *C) {
 //	_, err := gt.grouper.Update(gt.procs)
@@ -51,10 +47,24 @@ func TestGrouperBasic(t *testing.T) {
 					Filedesc{40, 400}, 3, States{Waiting: 1}),
 			},
 			GroupByName{
-				"g1": Group{Counts{}, States{Other: 1}, msi{}, 1, Memory{7, 8, 0, 0, 0}, starttime,
-					4, 0.01, 2, nil},
-				"g2": Group{Counts{}, States{Waiting: 1}, msi{}, 1, Memory{8, 9, 0, 0, 0}, starttime,
-					40, 0.1, 3, nil},
+				"g1": Group{
+					Counts{},
+					States{Other: 1},
+					msi{},
+					1,
+					Memory{7, 8, 0, 0, 0},
+					starttime,
+					4, 0.01, 2, nil,
+				},
+				"g2": Group{
+					Counts{},
+					States{Waiting: 1},
+					msi{},
+					1,
+					Memory{8, 9, 0, 0, 0},
+					starttime,
+					40, 0.1, 3, nil,
+				},
 			},
 		},
 		{
@@ -65,15 +75,27 @@ func TestGrouperBasic(t *testing.T) {
 					Memory{9, 8, 0, 0, 0}, Filedesc{400, 400}, 2, States{Running: 1}),
 			},
 			GroupByName{
-				"g1": Group{Counts{1, 1, 1, 1, 1, 1, 0, 0}, States{Zombie: 1}, msi{}, 1,
-					Memory{6, 7, 0, 0, 0}, starttime, 100, 0.25, 4, nil},
-				"g2": Group{Counts{2, 2, 2, 2, 2, 2, 0, 0}, States{Running: 1}, msi{}, 1,
-					Memory{9, 8, 0, 0, 0}, starttime, 400, 1, 2, nil},
+				"g1": Group{
+					Counts{1, 1, 1, 1, 1, 1, 0, 0},
+					States{Zombie: 1},
+					msi{},
+					1,
+					Memory{6, 7, 0, 0, 0},
+					starttime, 100, 0.25, 4, nil,
+				},
+				"g2": Group{
+					Counts{2, 2, 2, 2, 2, 2, 0, 0},
+					States{Running: 1},
+					msi{},
+					1,
+					Memory{9, 8, 0, 0, 0},
+					starttime, 400, 1, 2, nil,
+				},
 			},
 		},
 	}
 
-	gr := NewGrouper(newNamer(n1, n2), false, false, false, 0, false, false)
+	gr := NewGrouper(newNamer(n1, n2), false, false, false, 0, false, slog.Default())
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.procs...))
 		if diff := cmp.Diff(got, tc.want); diff != "" {
@@ -111,8 +133,14 @@ func TestGrouperProcJoin(t *testing.T) {
 					Memory{1, 2, 0, 0, 0}, Filedesc{40, 400}, 3, States{Sleeping: 1}),
 			},
 			GroupByName{
-				"g1": Group{Counts{2, 2, 2, 2, 2, 2, 0, 0}, States{Running: 1, Sleeping: 1}, msi{}, 2,
-					Memory{4, 6, 0, 0, 0}, starttime, 44, 0.1, 5, nil},
+				"g1": Group{
+					Counts{2, 2, 2, 2, 2, 2, 0, 0},
+					States{Running: 1, Sleeping: 1},
+					msi{},
+					2,
+					Memory{4, 6, 0, 0, 0},
+					starttime, 44, 0.1, 5, nil,
+				},
 			},
 		}, {
 			[]IDInfo{
@@ -122,13 +150,19 @@ func TestGrouperProcJoin(t *testing.T) {
 					Memory{2, 4, 0, 0, 0}, Filedesc{40, 400}, 3, States{Running: 1}),
 			},
 			GroupByName{
-				"g1": Group{Counts{4, 4, 4, 4, 4, 4, 0, 0}, States{Running: 2}, msi{}, 2,
-					Memory{3, 9, 0, 0, 0}, starttime, 44, 0.1, 5, nil},
+				"g1": Group{
+					Counts{4, 4, 4, 4, 4, 4, 0, 0},
+					States{Running: 2},
+					msi{},
+					2,
+					Memory{3, 9, 0, 0, 0},
+					starttime, 44, 0.1, 5, nil,
+				},
 			},
 		},
 	}
 
-	gr := NewGrouper(newNamer(n1), false, false, false, 0, false, false)
+	gr := NewGrouper(newNamer(n1), false, false, false, 0, false, slog.Default())
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.procs...))
 		if diff := cmp.Diff(got, tc.want); diff != "" {
@@ -171,7 +205,7 @@ func TestGrouperNonDecreasing(t *testing.T) {
 		},
 	}
 
-	gr := NewGrouper(newNamer(n1), false, false, false, 0, false, false)
+	gr := NewGrouper(newNamer(n1), false, false, false, 0, false, slog.Default())
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.procs...))
 		if diff := cmp.Diff(got, tc.want); diff != "" {
@@ -213,7 +247,7 @@ func TestGrouperRemoveEmptyGroups(t *testing.T) {
 		},
 	}
 
-	gr := NewGrouper(newNamer(n1, n2), false, false, false, 0, false, true)
+	gr := NewGrouper(newNamer(n1, n2), false, false, false, 0, false, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.procs...))
 		if diff := cmp.Diff(got, tc.want); diff != "" {
@@ -236,8 +270,8 @@ func TestGrouperThreads(t *testing.T) {
 			}),
 			GroupByName{
 				"g1": Group{Counts{}, States{}, msi{}, 1, Memory{}, tm, 1, 1, 2, []Threads{
-					Threads{"t1", 1, Counts{}},
-					Threads{"t2", 1, Counts{}},
+					{"t1", 1, Counts{}},
+					{"t2", 1, Counts{}},
 				}},
 			},
 		}, {
@@ -248,8 +282,8 @@ func TestGrouperThreads(t *testing.T) {
 			}),
 			GroupByName{
 				"g1": Group{Counts{}, States{}, msi{}, 1, Memory{}, tm, 1, 1, 3, []Threads{
-					Threads{"t1", 1, Counts{1, 1, 1, 1, 1, 1, 0, 0}},
-					Threads{"t2", 2, Counts{1, 1, 1, 1, 1, 1, 0, 0}},
+					{"t1", 1, Counts{1, 1, 1, 1, 1, 1, 0, 0}},
+					{"t2", 2, Counts{1, 1, 1, 1, 1, 1, 0, 0}},
 				}},
 			},
 		}, {
@@ -259,14 +293,14 @@ func TestGrouperThreads(t *testing.T) {
 			}),
 			GroupByName{
 				"g1": Group{Counts{}, States{}, msi{}, 1, Memory{}, tm, 1, 1, 2, []Threads{
-					Threads{"t2", 2, Counts{4, 5, 6, 7, 8, 9, 0, 0}},
+					{"t2", 2, Counts{4, 5, 6, 7, 8, 9, 0, 0}},
 				}},
 			},
 		},
 	}
 
 	opts := cmpopts.SortSlices(lessThreads)
-	gr := NewGrouper(newNamer(n), false, true, false, 0, false, false)
+	gr := NewGrouper(newNamer(n), false, true, false, 0, false, slog.Default())
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.proc))
 		if diff := cmp.Diff(got, tc.want, opts); diff != "" {

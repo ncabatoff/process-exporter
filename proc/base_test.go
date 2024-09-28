@@ -51,7 +51,7 @@ func newNamer(names ...string) namer {
 }
 
 func (n namer) String() string {
-	var ss = make([]string, 0, len(n))
+	ss := make([]string, 0, len(n))
 	for s := range n {
 		ss = append(ss, s)
 	}

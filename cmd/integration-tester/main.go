@@ -30,7 +30,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cmdlg := exec.CommandContext(ctx, *flagLoadGenerator, "-write-size-bytes", strconv.Itoa(*flagWriteSizeBytes))
-	var buf = &bytes.Buffer{}
+	buf := &bytes.Buffer{}
 	cmdlg.Stdout = buf
 	err := cmdlg.Start()
 	if err != nil {
@@ -60,7 +60,11 @@ func main() {
 	}
 
 	cancel()
-	cmdlg.Wait()
+	err = cmdlg.Wait()
+	if err != nil {
+		log.Printf("Error waiting for load generator %q: %v", *flagLoadGenerator, err)
+		success = false
+	}
 
 	if !success {
 		os.Exit(1)

@@ -3,8 +3,8 @@ package config
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
-	"log"
+	"log/slog"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -70,7 +70,7 @@ func (e *exeMatcher) String() string {
 }
 
 func (c *commMatcher) String() string {
-	var comms = make([]string, 0, len(c.comms))
+	comms := make([]string, 0, len(c.comms))
 	for cm := range c.comms {
 		comms = append(comms, cm)
 	}
@@ -115,7 +115,7 @@ func (m *matchNamer) MatchAndName(nacl common.ProcAttributes) (bool, string) {
 	}
 
 	var buf bytes.Buffer
-	m.template.Execute(&buf, &templateParams{
+	err := m.template.Execute(&buf, &templateParams{
 		Comm:      nacl.Name,
 		Cgroups:   nacl.Cgroups,
 		ExeBase:   exebase,
@@ -125,6 +125,9 @@ func (m *matchNamer) MatchAndName(nacl common.ProcAttributes) (bool, string) {
 		PID:       nacl.PID,
 		StartTime: nacl.StartTime,
 	})
+	if err != nil {
+		return false, ""
+	}
 	return true, buf.String()
 }
 
@@ -269,19 +272,18 @@ func (r MatcherRules) ToConfig() (*Config, error) {
 }
 
 // ReadRecipesFile opens the named file and extracts recipes from it.
-func ReadFile(cfgpath string, debug bool) (*Config, error) {
-	content, err := ioutil.ReadFile(cfgpath)
+func ReadFile(cfgpath string, logger *slog.Logger) (*Config, error) {
+	content, err := os.ReadFile(cfgpath)
 	if err != nil {
 		return nil, fmt.Errorf("error reading config file %q: %v", cfgpath, err)
 	}
-	if debug {
-		log.Printf("Config file %q contents:\n%s", cfgpath, content)
-	}
-	return GetConfig(string(content), debug)
+	logger.Debug("Config file", "path", cfgpath, "contents", string(content))
+
+	return GetConfig(string(content))
 }
 
 // GetConfig extracts Config from content by parsing it as YAML.
-func GetConfig(content string, debug bool) (*Config, error) {
+func GetConfig(content string) (*Config, error) {
 	var cfg Config
 	err := yaml.Unmarshal([]byte(content), &cfg)
 	if err != nil {

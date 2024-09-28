@@ -2,7 +2,7 @@ package proc
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os/user"
 	"strconv"
 	"time"
@@ -34,7 +34,7 @@ type (
 		// limit rechecks to this much time
 		recheckTimeLimit time.Duration
 		username         map[int]string
-		debug            bool
+		logger           *slog.Logger
 	}
 
 	// Delta is an alias of Counts used to signal that its contents are not
@@ -113,8 +113,6 @@ func lessUpdateGroupName(x, y Update) bool { return x.GroupName < y.GroupName }
 
 func lessThreadUpdate(x, y ThreadUpdate) bool { return seq.Compare(x, y) < 0 }
 
-func lessCounts(x, y Counts) bool { return seq.Compare(x, y) < 0 }
-
 func (tp *trackedProc) getUpdate() Update {
 	u := Update{
 		GroupName:  tp.groupName,
@@ -141,7 +139,7 @@ func (tp *trackedProc) getUpdate() Update {
 }
 
 // NewTracker creates a Tracker.
-func NewTracker(namer common.MatchNamer, trackChildren bool, recheck bool, recheckTimeLimit time.Duration, debug bool) *Tracker {
+func NewTracker(namer common.MatchNamer, trackChildren bool, recheck bool, recheckTimeLimit time.Duration, logger *slog.Logger) *Tracker {
 	return &Tracker{
 		namer:            namer,
 		tracked:          make(map[ID]*trackedProc),
@@ -150,7 +148,7 @@ func NewTracker(namer common.MatchNamer, trackChildren bool, recheck bool, reche
 		recheck:          recheck,
 		recheckTimeLimit: recheckTimeLimit,
 		username:         make(map[int]string),
-		debug:            debug,
+		logger:           logger,
 	}
 }
 
@@ -164,7 +162,8 @@ func (t *Tracker) track(groupName string, idinfo IDInfo) {
 		tproc.threads = make(map[ThreadID]trackedThread)
 		for _, thr := range idinfo.Threads {
 			tproc.threads[thr.ThreadID] = trackedThread{
-				thr.ThreadName, thr.Counts, Delta{}, time.Time{}, thr.Wchan}
+				thr.ThreadName, thr.Counts, Delta{}, time.Time{}, thr.Wchan,
+			}
 		}
 	}
 
@@ -228,9 +227,7 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 	var cerrs CollectErrors
 	procID, err := proc.GetProcID()
 	if err != nil {
-		if t.debug {
-			log.Printf("error getting proc ID for pid %+v: %v", proc.GetPid(), err)
-		}
+		t.logger.Debug("error getting proc ID", "pid", proc.GetPid(), "error", err.Error())
 		return nil, cerrs
 	}
 
@@ -242,9 +239,8 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 
 	metrics, softerrors, err := proc.GetMetrics()
 	if err != nil {
-		if t.debug {
-			log.Printf("error reading metrics for %+v: %v", procID, err)
-		}
+		t.logger.Debug("error reading metrics", "pid", proc.GetPid(), "error", err.Error())
+
 		// This usually happens due to the proc having exited, i.e.
 		// we lost the race.  We don't count that as an error.
 		if err != ErrProcNotExist {
@@ -256,9 +252,8 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 	var threads []Thread
 	threads, err = proc.GetThreads()
 	if err != nil {
-		if t.debug {
-			log.Printf("can't read thread metrics for %+v: %v", procID, err)
-		}
+		t.logger.Debug("can't read thread metrics", "pid", proc.GetPid(), "error", err.Error())
+
 		softerrors |= 1
 	}
 	cerrs.Partial += softerrors
@@ -278,15 +273,12 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 	} else {
 		static, err := proc.GetStatic()
 		if err != nil {
-			if t.debug {
-				log.Printf("error reading static details for %+v: %v", procID, err)
-			}
+			t.logger.Debug("error reading static details", "pid", proc.GetPid(), "error", err.Error())
+
 			return nil, cerrs
 		}
 		newProc = &IDInfo{procID, static, metrics, threads}
-		if t.debug {
-			log.Printf("found new proc: %s", newProc)
-		}
+		t.logger.Debug("found new proc", "proc", newProc)
 
 		// Is this a new process with the same pid as one we already know?
 		// Then delete it from the known map, otherwise the cleanup in Update()
@@ -305,7 +297,7 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 func (t *Tracker) update(procs Iter) ([]IDInfo, CollectErrors, error) {
 	var newProcs []IDInfo
 	var colErrs CollectErrors
-	var now = time.Now()
+	now := time.Now()
 
 	for procs.Next() {
 		newProc, cerrs := t.handleProc(procs, now)
@@ -348,9 +340,7 @@ func (t *Tracker) checkAncestry(idinfo IDInfo, newprocs map[ID]IDInfo) string {
 	ppid := idinfo.ParentPid
 	pProcID := t.procIds[ppid]
 	if pProcID.Pid < 1 {
-		if t.debug {
-			log.Printf("ignoring unmatched proc with no matched parent: %+v", idinfo)
-		}
+		t.logger.Debug("ignoring unmatched proc with no matched parent", "proc", idinfo)
 		// Reached root of process tree without finding a tracked parent.
 		t.ignore(idinfo.ID, idinfo.Static.StartTime)
 		return ""
@@ -359,10 +349,8 @@ func (t *Tracker) checkAncestry(idinfo IDInfo, newprocs map[ID]IDInfo) string {
 	// Is the parent already known to the tracker?
 	if ptproc, ok := t.tracked[pProcID]; ok {
 		if ptproc != nil {
-			if t.debug {
-				log.Printf("matched as %q because child of %+v: %+v",
-					ptproc.groupName, pProcID, idinfo)
-			}
+			t.logger.Debug("matched as child of tracked proc", "parent", ptproc, "child", idinfo)
+
 			// We've found a tracked parent.
 			t.track(ptproc.groupName, idinfo)
 			return ptproc.groupName
@@ -375,10 +363,7 @@ func (t *Tracker) checkAncestry(idinfo IDInfo, newprocs map[ID]IDInfo) string {
 	// Is the parent another new process?
 	if pinfoid, ok := newprocs[pProcID]; ok {
 		if name := t.checkAncestry(pinfoid, newprocs); name != "" {
-			if t.debug {
-				log.Printf("matched as %q because child of %+v: %+v",
-					name, pProcID, idinfo)
-			}
+			t.logger.Debug("matched as child of tracked proc", "parent", pProcID, "child", idinfo)
 			// We've found a tracked parent, which implies this entire lineage should be tracked.
 			t.track(name, idinfo)
 			return name
@@ -386,9 +371,7 @@ func (t *Tracker) checkAncestry(idinfo IDInfo, newprocs map[ID]IDInfo) string {
 	}
 
 	// Parent is dead, i.e. we never saw it, or there's no tracked proc in our ancestry.
-	if t.debug {
-		log.Printf("ignoring unmatched proc with no matched parent: %+v", idinfo)
-	}
+	t.logger.Debug("ignoring unmatched proc with no matched parent", "proc", idinfo)
 	t.ignore(idinfo.ID, idinfo.Static.StartTime)
 	return ""
 }
@@ -437,9 +420,7 @@ func (t *Tracker) Update(iter Iter) (CollectErrors, []Update, error) {
 		}
 		wanted, gname := t.namer.MatchAndName(nacl)
 		if wanted {
-			if t.debug {
-				log.Printf("matched as %q: %+v", gname, idinfo)
-			}
+			t.logger.Debug("matched as tracked proc", "group", gname, "proc", idinfo)
 			t.track(gname, idinfo)
 		} else {
 			untracked[idinfo.ID] = idinfo

@@ -29,7 +29,7 @@ func procInfoIter(ps ...IDInfo) *procIterator {
 }
 
 func allprocs(procpath string) Iter {
-	fs, err := NewFS(procpath, false)
+	fs, err := NewFS(procpath)
 	if err != nil {
 		cwd, _ := os.Getwd()
 		panic("can't read " + procpath + ", cwd=" + cwd + ", err=" + fmt.Sprintf("%v", err))
@@ -139,6 +139,7 @@ func TestAllProcs(t *testing.T) {
 			t.Errorf("got empty states")
 		}
 		threads, err := procs.GetThreads()
+		noerr(t, err)
 		if len(threads) < 2 {
 			t.Errorf("got %d thread details, want >1", len(threads))
 		}

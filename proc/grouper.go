@@ -1,6 +1,7 @@
 package proc
 
 import (
+	"log/slog"
 	"time"
 
 	seq "github.com/ncabatoff/go-seq/seq"
@@ -16,7 +17,7 @@ type (
 		groupAccum        map[string]Counts
 		tracker           *Tracker
 		threadAccum       map[string]map[string]Threads
-		debug             bool
+		logger            *slog.Logger
 		removeEmptyGroups bool
 	}
 
@@ -50,13 +51,13 @@ type (
 func lessThreads(x, y Threads) bool { return seq.Compare(x, y) < 0 }
 
 // NewGrouper creates a grouper.
-func NewGrouper(namer common.MatchNamer, trackChildren, trackThreads, recheck bool, recheckTimeLimit time.Duration, debug bool, removeEmptyGroups bool) *Grouper {
+func NewGrouper(namer common.MatchNamer, trackChildren, trackThreads, recheck bool, recheckTimeLimit time.Duration, removeEmptyGroups bool, logger *slog.Logger) *Grouper {
 	g := Grouper{
 		groupAccum:        make(map[string]Counts),
 		threadAccum:       make(map[string]map[string]Threads),
-		tracker:           NewTracker(namer, trackChildren, recheck, recheckTimeLimit, debug),
-		debug:             debug,
+		tracker:           NewTracker(namer, trackChildren, recheck, recheckTimeLimit, logger),
 		removeEmptyGroups: removeEmptyGroups,
+		logger:            logger,
 	}
 	return &g
 }
@@ -118,8 +119,7 @@ func (g *Grouper) groups(tracked []Update) GroupByName {
 	for _, update := range tracked {
 		groups[update.GroupName] = groupadd(groups[update.GroupName], update)
 		if update.Threads != nil {
-			threadsByGroup[update.GroupName] =
-				append(threadsByGroup[update.GroupName], update.Threads...)
+			threadsByGroup[update.GroupName] = append(threadsByGroup[update.GroupName], update.Threads...)
 		}
 	}
 

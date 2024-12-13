@@ -18,7 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	verCollector "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/common/promlog"
+	"github.com/prometheus/common/promslog"
 	promVersion "github.com/prometheus/common/version"
 	"github.com/prometheus/exporter-toolkit/web"
 )
@@ -183,8 +183,8 @@ func main() {
 	)
 	flag.Parse()
 
-	promlogConfig := &promlog.Config{}
-	logger := promlog.New(promlogConfig)
+	promslogConfig := &promslog.Config{}
+	logger := promslog.New(promslogConfig)
 
 	if *showVersion {
 		fmt.Printf("%s\n", promVersion.Print("process-exporter"))

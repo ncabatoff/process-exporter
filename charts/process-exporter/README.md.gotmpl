@@ -1,0 +1,47 @@
+{{ template "chart.header" . }}
+[process-exporter](https://github.com/ncabatoff/process-exporter) is an agent which ships several information about each processes running on the operating system
+
+{{ template "chart.versionBadge" . }}{{ template "chart.typeBadge" . }}{{ template "chart.appVersionBadge" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+## Get Repo Info
+
+```console
+helm repo add process-exporter https://ncabatoff.github.io/process-exporter
+helm repo update
+```
+
+## Install Chart
+
+**Important:** only helm3 is supported
+
+```console
+helm install [RELEASE_NAME] process-exporter/process-exporter
+```
+
+The command deploys process-exporter on the Kubernetes cluster in the default configuration.
+
+_See [configuration](#configuration) below._
+
+_See [helm install](https://helm.sh/docs/helm/helm_install/) for command documentation._
+
+## Uninstall Chart
+
+```console
+helm uninstall [RELEASE_NAME]
+```
+
+This removes all the Kubernetes components associated with the chart and deletes the release.
+
+_See [helm uninstall](https://helm.sh/docs/helm/helm_uninstall/) for command documentation._
+
+## Upgrading Chart
+
+```console
+helm upgrade [RELEASE_NAME] [CHART] --install
+```
+
+_See [helm upgrade](https://helm.sh/docs/helm/helm_upgrade/) for command documentation._
+
+{{ template "chart.valuesSection" . }}

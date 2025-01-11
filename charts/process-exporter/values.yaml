@@ -1,0 +1,198 @@
+# Default values for process-exporter.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+image:
+  repository: ncabatoff/process-exporter
+  # Overrides the image tag whose default is {{ printf "v%s" .Chart.AppVersion }}
+  tag: ""
+  pullPolicy: IfNotPresent
+  digest: ""
+
+imagePullSecrets: []
+# - name: "image-pull-secret"
+
+nameOverride: ""
+fullnameOverride: ""
+namespaceOverride: ""
+
+# Number of old history to retain to allow rollback
+# Default Kubernetes value is set to 10
+revisionHistoryLimit: 10
+
+configmap:
+  enabled: true
+  name: ""
+  mountPath: "/config"
+  configFile:
+    process_names:
+    - name: "{{.Comm}}"
+      cmdline:
+      - '.+'
+
+port:
+  name: http
+  number: 9256
+
+# Additional environment variables that will be passed to the daemonset
+env: {}
+##  env:
+##    VARIABLE: value
+
+## Customize the updateStrategy if set
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 200m
+  #   memory: 50Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 30Mi
+
+# Specify the container restart policy passed to the Node Export container
+# Possible Values: Always (default)|OnFailure|Never
+restartPolicy: null
+
+serviceAccount:
+  # Specifies whether a ServiceAccount should be created
+  create: true
+  # The name of the ServiceAccount to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name:
+  annotations: {}
+  imagePullSecrets: []
+  automountServiceAccountToken: false
+
+securityContext:
+  fsGroup: 65534
+  runAsGroup: 65534
+  runAsNonRoot: true
+  runAsUser: 65534
+
+containerSecurityContext:
+  readOnlyRootFilesystem: true
+  # capabilities:
+  #   add:
+  #   - SYS_TIME
+
+# Expose the service to the host network
+hostNetwork: false
+
+# Share the host process ID namespace
+hostPID: true
+
+# Share the host ipc namespace
+hostIPC: false
+
+# Mount the node's proc file system (/proc) at /host/proc in the container
+hostProcFsMount:
+  # Possible values are None, HostToContainer, and Bidirectional
+  mountPropagation: ""
+
+## Assign a group of affinity scheduling rules
+##
+affinity: {}
+#   nodeAffinity:
+#     requiredDuringSchedulingIgnoredDuringExecution:
+#       nodeSelectorTerms:
+#         - matchFields:
+#             - key: metadata.name
+#               operator: In
+#               values:
+#                 - target-host-name
+
+# Annotations to be added to node exporter pods
+podAnnotations:
+  # Fix for very slow GKE cluster upgrades
+  cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+
+# Extra labels to add to node exporter pods (can be templated)
+podLabels: {}
+
+## Extra labels to attach to all resources (can be templated)
+commonLabels: {}
+
+# Annotations to be added to node exporter daemonset
+daemonsetAnnotations: {}
+
+# Custom DNS configuration to be added to process-exporter pods
+dnsConfig: {}
+# nameservers:
+#   - 1.2.3.4
+# searches:
+#   - ns1.svc.cluster-domain.example
+#   - my.dns.search.suffix
+# options:
+#   - name: ndots
+#     value: "2"
+#   - name: edns0
+
+## Assign a nodeSelector if operating a hybrid cluster
+##
+nodeSelector:
+  kubernetes.io/os: linux
+  #  kubernetes.io/arch: amd64
+
+# Specify grace period for graceful termination of pods. Defaults to 30 if null or not specified
+terminationGracePeriodSeconds: null
+
+tolerations:
+  - effect: NoSchedule
+    operator: Exists
+
+## Assign a PriorityClassName to pods if set
+# priorityClassName: ""
+
+## Additional container arguments
+##
+extraArgs: []
+
+## Liveness probe
+##
+livenessProbe:
+  failureThreshold: 3
+  httpGet:
+    httpHeaders: []
+    scheme: HTTP
+    path: /
+    port: 9256
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 1
+
+## Readiness probe
+##
+readinessProbe:
+  failureThreshold: 3
+  httpGet:
+    httpHeaders: []
+    scheme: HTTP
+    path: /
+    port: 9256
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 1
+
+## Extra volumes to become available in the pod
+extraVolumes: []
+  # - name: extra-volume
+  #   secret:
+  #     defaultMode: 420
+  #     optional: false
+  #     secretName: node-exporter-secret
+
+## Extra volume mounts in the node-exporter container
+extraVolumeMounts: []
+  # - name: extra-volume
+  #   mountPath: /extra
+  #   readOnly: true

@@ -1,0 +1,9 @@
+apiVersion: v2
+name: process-exporter
+description: Process-exporter is an agent which ships several information about each processes running on the operating system
+type: application
+appVersion: 0.8.4
+version: 1.0.0
+home: https://github.com/ncabatoff/process-exporter
+sources:
+  - https://github.com/ncabatoff/process-exporter

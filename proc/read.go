@@ -42,6 +42,7 @@ type (
 		CPUSystemTime         float64
 		ReadBytes             uint64
 		WriteBytes            uint64
+		InotifyWatches        uint64
 		MajorPageFaults       uint64
 		MinorPageFaults       uint64
 		CtxSwitchVoluntary    uint64
@@ -137,6 +138,7 @@ type (
 		status  *procfs.ProcStatus
 		cmdline []string
 		cgroups []procfs.Cgroup
+		fdi     procfs.ProcFDInfos
 		io      *procfs.ProcIO
 		fs      *FS
 		wchan   *string
@@ -208,6 +210,7 @@ func (c *Counts) Add(c2 Delta) {
 	c.CPUSystemTime += c2.CPUSystemTime
 	c.ReadBytes += c2.ReadBytes
 	c.WriteBytes += c2.WriteBytes
+	c.InotifyWatches += c2.InotifyWatches
 	c.MajorPageFaults += c2.MajorPageFaults
 	c.MinorPageFaults += c2.MinorPageFaults
 	c.CtxSwitchVoluntary += c2.CtxSwitchVoluntary
@@ -220,6 +223,7 @@ func (c Counts) Sub(c2 Counts) Delta {
 	c.CPUSystemTime -= c2.CPUSystemTime
 	c.ReadBytes -= c2.ReadBytes
 	c.WriteBytes -= c2.WriteBytes
+	c.InotifyWatches -= c2.InotifyWatches
 	c.MajorPageFaults -= c2.MajorPageFaults
 	c.MinorPageFaults -= c2.MinorPageFaults
 	c.CtxSwitchVoluntary -= c2.CtxSwitchVoluntary
@@ -359,6 +363,17 @@ func (p *proccache) getIo() (procfs.ProcIO, error) {
 	return *p.io, nil
 }
 
+func (p *proccache) getFdi() (procfs.ProcFDInfos, error) {
+	if p.fdi == nil {
+		fdi, err := p.Proc.FileDescriptorsInfo()
+		if err != nil {
+			return nil, err
+		}
+		p.fdi = fdi
+	}
+	return p.fdi, nil
+}
+
 // GetStatic returns the ProcStatic corresponding to this proc.
 func (p *proccache) GetStatic() (Static, error) {
 	// /proc/<pid>/cmdline is normally world-readable.
@@ -426,11 +441,22 @@ func (p proc) GetCounts() (Counts, int, error) {
 	if err != nil {
 		softerrors++
 	}
+
+	fdi, err := p.getFdi()
+	inotifyWatches := 0
+	if err != nil {
+		softerrors++
+	} else if w, err := fdi.InotifyWatchLen(); err != nil {
+		softerrors++
+	} else {
+		inotifyWatches = w
+	}
 	return Counts{
 		CPUUserTime:           float64(stat.UTime) / userHZ,
 		CPUSystemTime:         float64(stat.STime) / userHZ,
 		ReadBytes:             io.ReadBytes,
 		WriteBytes:            io.WriteBytes,
+		InotifyWatches:        uint64(inotifyWatches),
 		MajorPageFaults:       uint64(stat.MajFlt),
 		MinorPageFaults:       uint64(stat.MinFlt),
 		CtxSwitchVoluntary:    uint64(status.VoluntaryCtxtSwitches),

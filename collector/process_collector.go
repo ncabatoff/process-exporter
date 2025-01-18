@@ -64,6 +64,12 @@ var (
 		[]string{"groupname"},
 		nil)
 
+	inotifyWatchesDesc = prometheus.NewDesc(
+		"namedprocess_namegroup_inotify_watches",
+		"number of registered inode notification watches",
+		[]string{"groupname"},
+		nil)
+
 	worstFDRatioDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_worst_fd_ratio",
 		"the worst (closest to 1) ratio between open fds and max fds among all procs in this group",
@@ -156,21 +162,23 @@ type (
 	}
 
 	ProcessCollectorOption struct {
-		ProcFSPath        string
-		Children          bool
-		Threads           bool
-		GatherSMaps       bool
-		Namer             common.MatchNamer
-		Recheck           bool
-		RecheckTimeLimit  time.Duration
-		Debug             bool
-		RemoveEmptyGroups bool
+		ProcFSPath           string
+		Children             bool
+		Threads              bool
+		GatherInotifyWatches bool
+		GatherSMaps          bool
+		Namer                common.MatchNamer
+		Recheck              bool
+		RecheckTimeLimit     time.Duration
+		Debug                bool
+		RemoveEmptyGroups    bool
 	}
 
 	NamedProcessCollector struct {
 		scrapeChan chan scrapeRequest
 		*proc.Grouper
 		threads              bool
+		inotify              bool
 		smaps                bool
 		source               proc.Source
 		scrapeErrors         int
@@ -192,6 +200,7 @@ func NewProcessCollector(options ProcessCollectorOption) (*NamedProcessCollector
 		Grouper:    proc.NewGrouper(options.Namer, options.Children, options.Threads, options.Recheck, options.RecheckTimeLimit, options.Debug, options.RemoveEmptyGroups),
 		source:     fs,
 		threads:    options.Threads,
+		inotify:    options.GatherInotifyWatches,
 		smaps:      options.GatherSMaps,
 		debug:      options.Debug,
 	}
@@ -219,6 +228,7 @@ func (p *NamedProcessCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- writeBytesDesc
 	ch <- membytesDesc
 	ch <- openFDsDesc
+	ch <- inotifyWatchesDesc
 	ch <- worstFDRatioDesc
 	ch <- startTimeDesc
 	ch <- majorPageFaultsDesc
@@ -307,6 +317,11 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 			for wchan, count := range gcounts.Wchans {
 				ch <- prometheus.MustNewConstMetric(threadWchanDesc,
 					prometheus.GaugeValue, float64(count), gname, wchan)
+			}
+
+			if p.inotify {
+				ch <- prometheus.MustNewConstMetric(inotifyWatchesDesc,
+					prometheus.GaugeValue, float64(gcounts.InotifyWatches), gname)
 			}
 
 			if p.smaps {

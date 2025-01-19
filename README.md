@@ -52,6 +52,11 @@ feature only for a specific duration after process starts.
 -procnames is intended as a quick alternative to using a config file.  Details
 in the following section.
 
+-remove-empty-groups (default:false) forget process groups with no processes.
+This is particularly useful if you have some process groups that you expect will 
+never return (e.g. if you have process groups named "scan-<scan-id>", and once 
+the scan is completed no more process will ever run for that scan again).
+
 To disable any of these options, use the `-option=false`.
 
 ## Configuration and group naming

@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"os/signal"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/ncabatoff/fakescraper"
@@ -269,6 +272,9 @@ func main() {
 		return
 	}
 
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
+
 	http.Handle(*metricsPath, promhttp.Handler())
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -281,10 +287,23 @@ func main() {
 			</html>`))
 	})
 	server := &http.Server{Addr: *listenAddress}
+
+	go func() {
+		<-sigs
+		log.Printf("Shutting down the server\n")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := server.Shutdown(ctx); err != nil {
+			log.Fatalf("Server Shutdown Failed: %v", err)
+		}
+	}()
+
 	if err := web.ListenAndServe(server, &web.FlagConfig{
 		WebListenAddresses: &[]string{*listenAddress},
 		WebConfigFile:      tlsConfigFile,
-	}, logger); err != nil {
+	}, logger); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Failed to start the server: %v", err)
 		os.Exit(1)
 	}

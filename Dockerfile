@@ -1,6 +1,6 @@
 # Start from a Debian image with the latest version of Go installed
 # and a workspace (GOPATH) configured at /go.
-FROM --platform=$BUILDPLATFORM golang:1.23.1 AS build
+FROM --platform=$BUILDPLATFORM golang:1.23.8 AS build
 ARG TARGETARCH
 ARG BUILDPLATFORM
 WORKDIR /go/src/github.com/ncabatoff/process-exporter

@@ -1,6 +1,7 @@
 on:
   push:
     branches: [master]
+    tags: ['v*']
   pull_request:
 
 jobs:
@@ -34,7 +35,7 @@ jobs:
             ncabatoff/process-exporter
           # generate Docker tags based on the following events/attributes
           tags: |
-            type=schedule
+            type=ref,event=tag
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}

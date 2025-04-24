@@ -314,6 +314,8 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 					prometheus.GaugeValue, float64(gcounts.Memory.ProportionalBytes), gname, "proportionalResident")
 				ch <- prometheus.MustNewConstMetric(membytesDesc,
 					prometheus.GaugeValue, float64(gcounts.Memory.ProportionalSwapBytes), gname, "proportionalSwapped")
+				ch <- prometheus.MustNewConstMetric(membytesDesc,
+					prometheus.GaugeValue, float64(gcounts.Memory.USSBytes), gname, "uss")
 			}
 
 			if p.threads {

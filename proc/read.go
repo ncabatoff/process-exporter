@@ -55,6 +55,7 @@ type (
 		VmSwapBytes           uint64
 		ProportionalBytes     uint64
 		ProportionalSwapBytes uint64
+		USSBytes              uint64
 	}
 
 	// Filedesc describes a proc's file descriptor usage and soft limit.
@@ -513,6 +514,7 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 		} else {
 			memory.ProportionalBytes = smaps.Pss
 			memory.ProportionalSwapBytes = smaps.SwapPss
+			memory.USSBytes = smaps.PrivateDirty + smaps.PrivateClean
 		}
 	}
 

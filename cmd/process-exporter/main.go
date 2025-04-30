@@ -166,6 +166,8 @@ func main() {
 			"if a proc is tracked, track with it any children that aren't part of their own group")
 		threads = flag.Bool("threads", true,
 			"report on per-threadname metrics as well")
+		mmaps = flag.Bool("gather-mmaps", true,
+			"gather metrics from maps file, which contains mmap info")
 		smaps = flag.Bool("gather-smaps", true,
 			"gather metrics from smaps file, which contains proportional resident memory size")
 		man = flag.Bool("man", false,
@@ -247,6 +249,7 @@ func main() {
 			ProcFSPath:        *procfsPath,
 			Children:          *children,
 			Threads:           *threads,
+			GatherMMaps:       *mmaps,
 			GatherSMaps:       *smaps,
 			Namer:             matchnamer,
 			Recheck:           *recheck,

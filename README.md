@@ -263,6 +263,11 @@ Number of context switches based on /proc/[pid]/status fields voluntary_ctxt_swi
 and nonvoluntary_ctxt_switches.  The extra label `ctxswitchtype` can have two values:
 `voluntary` and `nonvoluntary`.
 
+### mmap_count gauge
+
+If gathering mmaps file is enabled, this indicates the maximum number of mmap entries
+of any process in the group.
+
 ### memory_bytes gauge
 
 Number of bytes of memory used.  The extra label `memtype` can have three values:
@@ -359,6 +364,12 @@ Same as minor_page_faults_total, but broken down per-thread subgroup.
 ### thread_context_switches_total counter
 
 Same as context_switches_total, but broken down per-thread subgroup.
+
+## Global metrics
+
+### max_map_count gauge
+
+If gathering mmaps file is enabled, this metric indicates the global maximum per process.
 
 ## Instrumentation cost
 

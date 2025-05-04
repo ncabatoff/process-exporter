@@ -78,6 +78,7 @@ func TestReadFixture(t *testing.T) {
 			CPUSystemTime:         0.04,
 			ReadBytes:             1814455,
 			WriteBytes:            0,
+			InotifyWatches:        1,
 			MajorPageFaults:       0x2ff,
 			MinorPageFaults:       0x643,
 			CtxSwitchVoluntary:    72,

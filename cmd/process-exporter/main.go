@@ -166,6 +166,8 @@ func main() {
 			"if a proc is tracked, track with it any children that aren't part of their own group")
 		threads = flag.Bool("threads", true,
 			"report on per-threadname metrics as well")
+		inotify = flag.Bool("gather-inotify-watches", true,
+			"gather metrics for registered inode notification watches")
 		smaps = flag.Bool("gather-smaps", true,
 			"gather metrics from smaps file, which contains proportional resident memory size")
 		man = flag.Bool("man", false,
@@ -244,15 +246,16 @@ func main() {
 
 	pc, err := collector.NewProcessCollector(
 		collector.ProcessCollectorOption{
-			ProcFSPath:        *procfsPath,
-			Children:          *children,
-			Threads:           *threads,
-			GatherSMaps:       *smaps,
-			Namer:             matchnamer,
-			Recheck:           *recheck,
-			RecheckTimeLimit:  *recheckTimeLimit,
-			Debug:             *debug,
-			RemoveEmptyGroups: *removeEmptyGroups,
+			ProcFSPath:           *procfsPath,
+			Children:             *children,
+			Threads:              *threads,
+			GatherInotifyWatches: *inotify,
+			GatherSMaps:          *smaps,
+			Namer:                matchnamer,
+			Recheck:              *recheck,
+			RecheckTimeLimit:     *recheckTimeLimit,
+			Debug:                *debug,
+			RemoveEmptyGroups:    *removeEmptyGroups,
 		},
 	)
 	if err != nil {

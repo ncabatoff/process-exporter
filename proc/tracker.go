@@ -263,17 +263,26 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 	}
 	cerrs.Partial += softerrors
 
-	if len(threads) > 0 {
-		metrics.Counts.CtxSwitchNonvoluntary, metrics.Counts.CtxSwitchVoluntary = 0, 0
-		for _, thread := range threads {
-			metrics.Counts.CtxSwitchNonvoluntary += thread.Counts.CtxSwitchNonvoluntary
-			metrics.Counts.CtxSwitchVoluntary += thread.Counts.CtxSwitchVoluntary
-			metrics.States.Add(thread.States)
-		}
-	}
-
 	var newProc *IDInfo
 	if known {
+		if len(threads) > 0 {
+			metrics.Counts.CtxSwitchNonvoluntary, metrics.Counts.CtxSwitchVoluntary = last.metrics.CtxSwitchNonvoluntary, last.metrics.CtxSwitchVoluntary
+			ctxSwitchNonvoluntaryDiff, ctxSwitchVoluntaryDiff := uint64(0), uint64(0)
+			for _, thread := range threads {
+				if lastThread, knownThread := last.threads[thread.ThreadID]; knownThread {
+					ctxSwitchNonvoluntaryDiff +=
+						thread.Counts.CtxSwitchNonvoluntary - lastThread.accum.CtxSwitchNonvoluntary
+					ctxSwitchVoluntaryDiff +=
+						thread.Counts.CtxSwitchVoluntary - lastThread.accum.CtxSwitchVoluntary
+				} else {
+					ctxSwitchNonvoluntaryDiff += thread.Counts.CtxSwitchNonvoluntary
+					ctxSwitchVoluntaryDiff += thread.Counts.CtxSwitchVoluntary
+				}
+				metrics.States.Add(thread.States)
+			}
+			metrics.Counts.CtxSwitchNonvoluntary += ctxSwitchNonvoluntaryDiff
+			metrics.Counts.CtxSwitchVoluntary += ctxSwitchVoluntaryDiff
+		}
 		last.update(metrics, updateTime, &cerrs, threads)
 	} else {
 		static, err := proc.GetStatic()
@@ -283,6 +292,16 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 			}
 			return nil, cerrs
 		}
+
+		if len(threads) > 0 {
+			metrics.Counts.CtxSwitchNonvoluntary, metrics.Counts.CtxSwitchVoluntary = 0, 0
+			for _, thread := range threads {
+				metrics.Counts.CtxSwitchNonvoluntary += thread.Counts.CtxSwitchNonvoluntary
+				metrics.Counts.CtxSwitchVoluntary += thread.Counts.CtxSwitchVoluntary
+				metrics.States.Add(thread.States)
+			}
+		}
+
 		newProc = &IDInfo{procID, static, metrics, threads}
 		if t.debug {
 			log.Printf("found new proc: %s", newProc)

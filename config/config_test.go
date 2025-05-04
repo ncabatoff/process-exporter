@@ -64,10 +64,13 @@ process_names:
   - comm:
     - cat
     name: "{{.StartTime}}"
+  - comm:
+    - echo
+    name: "{{.Cwd}}"
 `
 	cfg, err := GetConfig(yml, false)
 	c.Assert(err, IsNil)
-	c.Check(cfg.MatchNamers.matchers, HasLen, 3)
+	c.Check(cfg.MatchNamers.matchers, HasLen, 4)
 
 	postgres := common.ProcAttributes{Name: "postmaster", Cmdline: []string{"/usr/bin/postmaster", "-D", "/data/pg"}}
 	found, name := cfg.MatchNamers.matchers[0].MatchAndName(postgres)
@@ -92,4 +95,13 @@ process_names:
 	found, name = cfg.MatchNamers.matchers[2].MatchAndName(cat)
 	c.Check(found, Equals, true)
 	c.Check(name, Equals, now.String())
+
+	echo := common.ProcAttributes{
+		Name:    "echo",
+		Cmdline: []string{"/bin/echo"},
+		Cwd:     "/",
+	}
+	found, name = cfg.MatchNamers.matchers[3].MatchAndName(echo)
+	c.Check(found, Equals, true)
+	c.Check(name, Equals, "/")
 }

@@ -116,6 +116,7 @@ Template variables available:
 - `{{.Cgroups}}` contains (if supported) the cgroups of the process
   (`/proc/self/cgroup`). This is particularly useful for identifying to which container
   a process belongs.
+- `{{.Cwd}}` contains the current working directory of the process (`/proc/self/cwd`).
 
 Using `PID` or `StartTime` is discouraged: this is almost never what you want,
 and is likely to result in high cardinality metrics which Prometheus will have

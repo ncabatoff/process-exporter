@@ -55,6 +55,7 @@ type (
 		VmSwapBytes           uint64
 		ProportionalBytes     uint64
 		ProportionalSwapBytes uint64
+		SHRBytes              uint64
 	}
 
 	// Filedesc describes a proc's file descriptor usage and soft limit.
@@ -134,6 +135,7 @@ type (
 		procfs.Proc
 		procid  *ID
 		stat    *procfs.ProcStat
+		statm   *procfs.ProcStatm
 		status  *procfs.ProcStatus
 		cmdline []string
 		cgroups []procfs.Cgroup
@@ -287,6 +289,18 @@ func (p *proccache) getStat() (procfs.ProcStat, error) {
 	}
 
 	return *p.stat, nil
+}
+
+func (p *proccache) getStatm() (procfs.ProcStatm, error) {
+	if p.statm == nil {
+		statm, err := p.Proc.NewStatm()
+		if err != nil {
+			return procfs.ProcStatm{}, err
+		}
+		p.statm = &statm
+	}
+
+	return *p.statm, nil
 }
 
 func (p *proccache) getStatus() (procfs.ProcStatus, error) {
@@ -478,6 +492,9 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 	// won't see the effect of the caching between calls.
 	stat, _ := p.getStat()
 
+	// Used for getting shared memory of process
+	statm, _ := p.getStatm()
+
 	// Ditto for states
 	states, _ := p.GetStates()
 
@@ -504,6 +521,7 @@ func (p proc) GetMetrics() (Metrics, int, error) {
 		ResidentBytes: uint64(stat.ResidentMemory()),
 		VirtualBytes:  uint64(stat.VirtualMemory()),
 		VmSwapBytes:   uint64(status.VmSwap),
+		SHRBytes:      uint64(statm.SHRBytes()),
 	}
 
 	if p.proccache.fs.GatherSMaps {

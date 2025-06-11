@@ -180,3 +180,38 @@ func TestTrackerThreads(t *testing.T) {
 		}
 	}
 }
+
+// Verify that the tracker correctly groups a process whose attributes
+// change after it has started when recheck is enabled and even though
+// the process was grouped the first time it was seen.
+func TestTrackerChangeName(t *testing.T) {
+	p1 := 1
+	n1_1, n1_2 := "n1_1", "n1_2"
+	t1 := time.Unix(1, 0).UTC()
+
+	tests := []struct {
+		procs []IDInfo
+		want  []Update
+	}{
+		{
+			[]IDInfo{newProcStart(p1, n1_1, 1)},
+			[]Update{{GroupName: n1_1, Start: t1, Wchans: msi{}}},
+		},
+		{
+			// p1 is still here but it has changed its name
+			[]IDInfo{newProcStart(p1, n1_2, 1)},
+			[]Update{{GroupName: n1_2, Start: t1, Wchans: msi{}}},
+		},
+	}
+	// recheck is enabled here
+	tr := NewTracker(newNamer(n1_1, n1_2), false, true, 0, false)
+
+	opts := cmpopts.SortSlices(lessUpdateGroupName)
+	for i, tc := range tests {
+		_, got, err := tr.Update(procInfoIter(tc.procs...))
+		noerr(t, err)
+		if diff := cmp.Diff(got, tc.want, opts); diff != "" {
+			t.Errorf("%d: update differs: (-got +want)\n%s", i, diff)
+		}
+	}
+}

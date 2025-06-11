@@ -126,6 +126,7 @@ func (tp *trackedProc) getUpdate() Update {
 		States:     tp.metrics.States,
 		Wchans:     make(map[string]int),
 	}
+
 	if tp.metrics.Wchan != "" {
 		u.Wchans[tp.metrics.Wchan] = 1
 	}
@@ -177,26 +178,33 @@ func (t *Tracker) track(groupName string, idinfo IDInfo) {
 	t.tracked[idinfo.ID] = &tproc
 }
 
-func (t *Tracker) ignore(id ID, startTime time.Time) {
-	// only ignore ID if we didn't set recheck to true
+func (t *Tracker) shouldRecheck(id ID, startTime time.Time) bool {
 	if t.recheck {
 		if t.recheckTimeLimit == 0 {
 			// plain -recheck with no time limit:
-			return
+			return true
 		}
 		if startTime.Add(t.recheckTimeLimit).After(time.Now()) {
 			// -recheckWithTimeLimit is used and the limit is not reached yet:
-			return
+			return true
 		}
 	}
-	t.tracked[id] = nil
+	return false
 }
 
-func (tp *trackedProc) update(metrics Metrics, now time.Time, cerrs *CollectErrors, threads []Thread) {
+func (t *Tracker) ignore(id ID, startTime time.Time) {
+	// only ignore ID if we didn't set recheck to true
+	if !t.shouldRecheck(id, startTime) {
+		t.tracked[id] = nil
+	}
+}
+
+func (tp *trackedProc) update(metrics Metrics, static Static, now time.Time, cerrs *CollectErrors, threads []Thread) {
 	// newcounts: resource consumption since last cycle
 	newcounts := metrics.Counts
 	tp.lastaccum = newcounts.Sub(tp.metrics.Counts)
 	tp.metrics = metrics
+	tp.static = static
 	tp.lastUpdate = now
 	if len(threads) > 1 {
 		if tp.threads == nil {
@@ -272,17 +280,18 @@ func (t *Tracker) handleProc(proc Proc, updateTime time.Time) (*IDInfo, CollectE
 		}
 	}
 
+	static, err := proc.GetStatic()
+	if err != nil {
+		if t.debug {
+			log.Printf("error reading static details for %+v: %v", procID, err)
+		}
+		return nil, cerrs
+	}
+
 	var newProc *IDInfo
 	if known {
-		last.update(metrics, updateTime, &cerrs, threads)
+		last.update(metrics, static, updateTime, &cerrs, threads)
 	} else {
-		static, err := proc.GetStatic()
-		if err != nil {
-			if t.debug {
-				log.Printf("error reading static details for %+v: %v", procID, err)
-			}
-			return nil, cerrs
-		}
 		newProc = &IDInfo{procID, static, metrics, threads}
 		if t.debug {
 			log.Printf("found new proc: %s", newProc)
@@ -459,8 +468,30 @@ func (t *Tracker) Update(iter Iter) (CollectErrors, []Update, error) {
 	}
 
 	tp := []Update{}
-	for _, tproc := range t.tracked {
+	for procID, tproc := range t.tracked {
 		if tproc != nil {
+			// Reclassify any proc that may have changed names
+			if t.shouldRecheck(procID, tproc.static.StartTime) {
+				nacl := common.ProcAttributes{
+					Name:      tproc.static.Name,
+					Cmdline:   tproc.static.Cmdline,
+					Cgroups:   tproc.static.Cgroups,
+					Username:  t.lookupUid(tproc.static.EffectiveUID),
+					PID:       procID.Pid,
+					StartTime: tproc.static.StartTime,
+				}
+
+				shouldTrack, gname := t.namer.MatchAndName(nacl)
+				if shouldTrack && gname != tproc.groupName {
+					if t.debug {
+						log.Printf("moving process %v from group %s to %s", procID.Pid, tproc.groupName, gname)
+					}
+					tproc.groupName = gname
+				} else if !shouldTrack {
+					t.ignore(procID, tproc.static.StartTime)
+					continue
+				}
+			}
 			tp = append(tp, tproc.getUpdate())
 		}
 	}

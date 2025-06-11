@@ -116,7 +116,7 @@ type (
 		// GetProcID() returns (pid,starttime), which can be considered a unique process id.
 		GetProcID() (ID, error)
 		// GetStatic() returns various details read from files under /proc/<pid>/.  Technically
-		// name may not be static, but we'll pretend it is.
+		// name may not always be static.
 		GetStatic() (Static, error)
 		// GetMetrics() returns various metrics read from files under /proc/<pid>/.
 		// It returns an error on complete failure.  Otherwise, it returns metrics

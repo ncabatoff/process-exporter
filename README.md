@@ -53,8 +53,8 @@ feature only for a specific duration after process starts.
 in the following section.
 
 -remove-empty-groups (default:false) forget process groups with no processes.
-This is particularly useful if you have some process groups that you expect will 
-never return (e.g. if you have process groups named "scan-<scan-id>", and once 
+This is particularly useful if you have some process groups that you expect will
+never return (e.g. if you have process groups named "scan-<scan-id>", and once
 the scan is completed no more process will ever run for that scan again).
 
 To disable any of these options, use the `-option=false`.
@@ -68,17 +68,135 @@ The recommended option is to use a config file via -config.path, but for
 convenience and backwards compatibility the -procnames/-namemapping options
 exist as an alternative.
 
-### Using a config file
+### Option 1. Using a config file (recommended)
 
-The general format of the -config.path YAML file is a top-level
-`process_names` section, containing a list of name matchers:
+This is the recommended way of configuring process-exporter. It requires you
+to create a YAML file and provide its path via the `-config.path=` command-line
+option.
+
+The general format of the `-config.path=` YAML file is a top-level `process_names`
+section, containing a list of group items:
 
 ```
 process_names:
-  - matcher1
-  - matcher2
-  ...
-  - matcherN
+  - name: "group1"
+    ...
+  - name: "group2"
+    ...
+  - name: "groupN"
+    ...
+```
+
+**A process may only belong to one group**: even if multiple items would match, the
+first one listed in the file wins.
+
+Each group is a YAML map containing one or more of these keys:
+- `name`: Template to use to name matching processes (optional, defaults to
+  `{{.ExeBase}}`). Template variables available are described below.
+- `comm`: List of possible kernel-maintained identifiers for processes, typically
+  derived from the executable basename truncated at 15 characters. It's the 2nd
+  field in `/proc/<pid>/stat` without parentheses (e.g. `chromium-browse`).
+- `exe`: List of possible first arguments of the command line, which is typically
+  the executable path or name (e.g. `/usr/bin/python3`, `python3`, `postgres`).
+  If the string in your config contains slashes, it must match the full path of
+  `argv[0]`; if it doesn't contain slashes, it matches the basename of `argv[0]`.
+- `cmdline`: List of all required regexps to match against the full command line
+  (`/proc/<pid>/cmdline`). The cmdline regexp uses the [Go syntax](https://golang.org/pkg/regexp).
+
+Each group item must contain at least one of `comm`, `exe` or `cmdline`.
+If more than one of `comm`, `exe` or `cmdline` is present, they must all match
+for a process to belong to this group.
+
+For `comm` and `exe`, the list of strings is an OR, meaning any process matching
+any of the strings will be added to the item's group. For `cmdline`, the list of
+regexes is an AND, meaning they all must match.
+
+
+> [!TIP]
+> Performance tip: give an `exe` or `comm` clause in addition to any `cmdline`
+> clause, so you avoid executing the regexp when the executable name doesn't
+> match.
+
+> [!WARNING]  
+> Security note: There is no way to be 100% sure that a process belongs to a
+> given group, so you should avoid using process-exporter to find malicious processes.
+>
+> This is because  `exe` and `cmdline` matching can be spoofed by a malicious
+> process ( e.g. `exec -a chromium-browser /usr/bin/python3 virus.py`), `comm`
+> can also be changed by a process itself using the `prctl(PR_SET_NAME)` syscall.
+
+#### Group name — template variables
+
+| Template Variable | Description                                                                                                      | Example Value                                 |
+|-------------------|------------------------------------------------------------------------------------------------------------------|-----------------------------------------------|
+| `{{.Comm}}`       | Kernel ID, typically first 15 characters of the original executable's basename (2nd field in `/proc/<pid>/stat`) | `unattended-upgr`                             |
+| `{{.ExeFull}}`    | First argument of the command line, typically executable with full path (`argv[0]`)                              | `/usr/bin/python3`                            |
+| `{{.ExeBase}}`    | Basename of the executable from the command line (`argv[0]`)                                                     | `python3`                                     |
+| `{{.Username}}`   | Username of the effective user                                                                                   | `root`                                        |
+| `{{.Cgroups}}`    | Cgroups of the process (`/proc/<pid>/cgroup`, useful for identifying to which container a process belongs)       | `[/system.slice/unattended-upgrades.service]` |
+
+Additionally, if `cmdline` regexps with named capturing groups are used,
+those captures are available as `{{.Matches.<name>}}`, where `<name>` is the
+name given to the capturing group in the regexp.
+
+Example `cmdline` regexp with named capturing group:
+
+```
+process_names:
+  - name: "myapp:{{.Matches.InstanceID}}"
+    exe:
+    - /usr/local/bin/myapp
+    cmdline:
+    - --instance-id\s+(?P<InstanceID>\S+)
+```
+
+Any capturing groups in a regexp must use the `?P<name>` option to assign a name to
+the capture, which is used to populate `.Matches`.
+
+There are also two less commonly used template variables: `{{.PID}}` and
+`{{.StartTime}}` (1999-01-01 01:01:01.01 +0000 UTC). These can be used to
+create a group that contains only a single process. StartTime is useful in
+conjunction with PID because PIDs get reused over time. However, using these
+variables is discouraged as it is almost never what you want, and is likely
+to result in high cardinality metrics which Prometheus will have trouble with.
+
+```
+process_names:
+  # comm is the second field of /proc/<pid>/stat minus parens.
+  # exe is argv[0]. If no slashes, only basename of argv[0] need match.
+  # If exe contains slashes, argv[0] must match exactly.
+  - name: "{{.ExeBase}}"
+    comm: # (
+    - unattended-upgr
+    exe: # ) AND (
+    - python3
+    # OR
+    - /usr/bin/python3
+  # )
+
+  # cmdline is a list of regexps applied to argv.
+  # Each must match, and any captures are added to the .Matches map.
+  - name: "{{.ExeFull}}:{{.Matches.Cfgfile}}"
+    exe:
+    - /usr/local/bin/process-exporter
+    cmdline:
+    - -config.path\s+(?P<Cfgfile>\S+)
+```
+
+Here's the config I use on my home machine:
+
+```
+process_names:
+  - comm:
+    - chromium-browse
+    - bash
+    - prometheus
+    - gvim
+  - exe:
+    - /sbin/upstart
+    cmdline:
+    - --user
+    name: upstart-user
 ```
 
 The default config shipped with the deb/rpm packages is:
@@ -90,100 +208,7 @@ process_names:
     - '.+'
 ```
 
-A process may only belong to one group: even if multiple items would match, the
-first one listed in the file wins.
-
-(Side note: to avoid confusion with the cmdline YAML element, we'll refer to
-the command-line arguments of a process `/proc/<pid>/cmdline` as the array
-`argv[]`.)
-
-#### Using a config file: group name
-
-Each item in `process_names` gives a recipe for identifying and naming
-processes.  The optional `name` tag defines a template to use to name
-matching processes; if not specified, `name` defaults to `{{.ExeBase}}`.
-
-Template variables available:
-- `{{.Comm}}` contains the basename of the original executable, i.e. 2nd field in `/proc/<pid>/stat`
-- `{{.ExeBase}}` contains the basename of the executable
-- `{{.ExeFull}}` contains the fully qualified path of the executable
-- `{{.Username}}` contains the username of the effective user
-- `{{.Matches}}` map contains all the matches resulting from applying cmdline regexps
-- `{{.PID}}` contains the PID of the process.  Note that using PID means the group
-  will only contain a single process.
-- `{{.StartTime}}` contains the start time of the process.  This can be useful
-  in conjunction with PID because PIDs get reused over time.
-- `{{.Cgroups}}` contains (if supported) the cgroups of the process
-  (`/proc/self/cgroup`). This is particularly useful for identifying to which container
-  a process belongs.
-
-Using `PID` or `StartTime` is discouraged: this is almost never what you want,
-and is likely to result in high cardinality metrics which Prometheus will have
-trouble with.
-
-#### Using a config file: process selectors
-
-Each item in `process_names` must contain one or more selectors (`comm`, `exe`
-or `cmdline`); if more than one selector is present, they must all match.  Each
-selector is a list of strings to match against a process's `comm`, `argv[0]`,
-or in the case of `cmdline`, a regexp to apply to the command line.  The cmdline
-regexp uses the [Go syntax](https://golang.org/pkg/regexp).
-
-For `comm` and `exe`, the list of strings is an OR, meaning any process
-matching any of the strings will be added to the item's group.
-
-For `cmdline`, the list of regexes is an AND, meaning they all must match.  Any
-capturing groups in a regexp must use the `?P<name>` option to assign a name to
-the capture, which is used to populate `.Matches`.
-
-Performance tip: give an exe or comm clause in addition to any cmdline
-clause, so you avoid executing the regexp when the executable name doesn't
-match.
-
-```
-
-process_names:
-  # comm is the second field of /proc/<pid>/stat minus parens.
-  # It is the base executable name, truncated at 15 chars.
-  # It cannot be modified by the program, unlike exe.
-  - comm:
-    - bash
-
-  # exe is argv[0]. If no slashes, only basename of argv[0] need match.
-  # If exe contains slashes, argv[0] must match exactly.
-  - exe:
-    - postgres
-    - /usr/local/bin/prometheus
-
-  # cmdline is a list of regexps applied to argv.
-  # Each must match, and any captures are added to the .Matches map.
-  - name: "{{.ExeFull}}:{{.Matches.Cfgfile}}"
-    exe:
-    - /usr/local/bin/process-exporter
-    cmdline:
-    - -config.path\s+(?P<Cfgfile>\S+)
-
-```
-
-Here's the config I use on my home machine:
-
-```
-
-process_names:
-  - comm:
-    - chromium-browse
-    - bash
-    - prometheus
-    - gvim
-  - exe:
-    - /sbin/upstart
-    cmdline:
-    - --user
-    name: upstart:-user
-
-```
-
-### Using -procnames/-namemapping instead of config.path
+### Option 2. Using -procnames/-namemapping instead of config.path
 
 Every name in the procnames list becomes a process group. The default name of
 a process is the value found in the second field of /proc/<pid>/stat
@@ -198,7 +223,7 @@ The -namemapping option is a comma-separated list of alternating
 name,regexp values. It allows assigning a name to a process based on a
 combination of the process name and command line. For example, using
 
-  -namemapping "python2,([^/]+)\.py,java,-jar\s+([^/]+).jar"
+-namemapping "python2,([^/]+)\.py,java,-jar\s+([^/]+).jar"
 
 will make it so that each different python2 and java -jar invocation will be
 tracked with distinct metrics. Processes whose remapped name is absent from
@@ -206,11 +231,11 @@ the procnames list will be ignored. On a Ubuntu Xenian machine being used as
 a workstation, here's a good way of tracking resource usage for a few
 different key user apps:
 
-  process-exporter -namemapping "upstart,(--user)" \
-    -procnames chromium-browse,bash,gvim,prometheus,process-exporter,upstart:-user
+process-exporter -namemapping "upstart,(--user)" \
+-procnames chromium-browse,bash,gvim,prometheus,process-exporter,upstart-user
 
 Since upstart --user is the parent process of the X11 session, this will
-make all apps started by the user fall into the group named "upstart:-user",
+make all apps started by the user fall into the group named "upstart-user",
 unless they're one of the others named explicitly with -procnames, like gvim.
 
 ## Group Metrics
@@ -324,7 +349,7 @@ The extra label `state` can have these values: `Running`, `Sleeping`, `Waiting`,
 
 ## Group Thread Metrics
 
-Since publishing thread metrics adds a lot of overhead, use the `-threads` command-line argument to disable them, 
+Since publishing thread metrics adds a lot of overhead, use the `-threads` command-line argument to disable them,
 if necessary.
 
 All these metrics start with `namedprocess_namegroup_` and have at minimum

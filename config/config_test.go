@@ -1,10 +1,11 @@
 package config
 
 import (
+	"time"
+
 	// "github.com/kylelemons/godebug/pretty"
 	common "github.com/ncabatoff/process-exporter"
 	. "gopkg.in/check.v1"
-	"time"
 )
 
 func (s MySuite) TestConfigBasic(c *C) {
@@ -48,6 +49,58 @@ process_names:
 	found, name = cfg.MatchNamers.matchers[2].MatchAndName(ksh)
 	c.Check(found, Equals, true)
 	c.Check(name, Equals, "ksh")
+}
+
+func (s MySuite) TestConfigCgroups(c *C) {
+	yml := `
+process_names:
+  - cgroup:
+    - "/user.slice"
+  - cgroup:
+    - "/system.slice/docker-"
+  - cgroup:
+    - "/system.slice/docker-8dde.scope/"
+`
+	cfg, err := GetConfig(yml, false)
+	c.Assert(err, IsNil)
+	c.Check(cfg.MatchNamers.matchers, HasLen, 3)
+
+	none := common.ProcAttributes{Name: "none"}
+	empty := common.ProcAttributes{Name: "empty", Cgroups: []string{}}
+	user := common.ProcAttributes{Name: "user", Cgroups: []string{"/user.slice/user-1000.slice/user@1000.service/app.slice/app-shell.scope"}}
+	docker := common.ProcAttributes{Name: "docker", Cgroups: []string{"/system.slice/ssh.service", "/system.slice/docker-8dde.scope"}}
+
+	// /user.slice
+	found, name := cfg.MatchNamers.matchers[0].MatchAndName(none)
+	c.Check(found, Equals, false)
+	found, _ = cfg.MatchNamers.matchers[0].MatchAndName(empty)
+	c.Check(found, Equals, false)
+	found, name = cfg.MatchNamers.matchers[0].MatchAndName(user)
+	c.Check(found, Equals, true)
+	c.Check(name, Equals, "user")
+	found, _ = cfg.MatchNamers.matchers[0].MatchAndName(docker)
+	c.Check(found, Equals, false)
+
+	// /system.slice/docker-
+	found, _ = cfg.MatchNamers.matchers[1].MatchAndName(none)
+	c.Check(found, Equals, false)
+	found, _ = cfg.MatchNamers.matchers[1].MatchAndName(empty)
+	c.Check(found, Equals, false)
+	found, _ = cfg.MatchNamers.matchers[1].MatchAndName(user)
+	c.Check(found, Equals, false)
+	found, name = cfg.MatchNamers.matchers[1].MatchAndName(docker)
+	c.Check(found, Equals, true)
+	c.Check(name, Equals, "docker")
+
+	// /system.slice/docker-8dde.scope/
+	found, _ = cfg.MatchNamers.matchers[2].MatchAndName(none)
+	c.Check(found, Equals, false)
+	found, _ = cfg.MatchNamers.matchers[2].MatchAndName(empty)
+	c.Check(found, Equals, false)
+	found, _ = cfg.MatchNamers.matchers[2].MatchAndName(user)
+	c.Check(found, Equals, false)
+	found, _ = cfg.MatchNamers.matchers[2].MatchAndName(docker)
+	c.Check(found, Equals, false) // No match, tailing slash
 }
 
 func (s MySuite) TestConfigTemplates(c *C) {

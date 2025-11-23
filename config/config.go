@@ -29,6 +29,10 @@ type (
 		comms map[string]struct{}
 	}
 
+	cgroupMatcher struct {
+		prefixes []string
+	}
+
 	exeMatcher struct {
 		exes map[string]string
 	}
@@ -75,6 +79,10 @@ func (c *commMatcher) String() string {
 		comms = append(comms, cm)
 	}
 	return fmt.Sprintf("comms: %+v", comms)
+}
+
+func (c *cgroupMatcher) String() string {
+	return fmt.Sprintf("cgroups: %+v", c.prefixes)
 }
 
 func (f FirstMatcher) String() string {
@@ -131,6 +139,21 @@ func (m *matchNamer) MatchAndName(nacl common.ProcAttributes) (bool, string) {
 func (m *commMatcher) Match(nacl common.ProcAttributes) bool {
 	_, found := m.comms[nacl.Name]
 	return found
+}
+
+func (m *cgroupMatcher) Match(nacl common.ProcAttributes) bool {
+	// To optimize, we could sort prefixes when we load the config and do
+	// binary search here. But I doubt anyone will have enough cgroup
+	// prefixes to make that worthwhile.
+
+	for _, cg := range nacl.Cgroups {
+		for _, p := range m.prefixes {
+			if strings.HasPrefix(cg, p) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (m *exeMatcher) Match(nacl common.ProcAttributes) bool {
@@ -204,6 +227,7 @@ type MatcherGroup struct {
 	Name         string   `yaml:"name"`
 	CommRules    []string `yaml:"comm"`
 	ExeRules     []string `yaml:"exe"`
+	CgroupRules  []string `yaml:"cgroup"`
 	CmdlineRules []string `yaml:"cmdline"`
 }
 
@@ -232,6 +256,9 @@ func (r MatcherRules) ToConfig() (*Config, error) {
 				}
 			}
 			matchers = append(matchers, &exeMatcher{exes})
+		}
+		if matcher.CgroupRules != nil {
+			matchers = append(matchers, &cgroupMatcher{matcher.CgroupRules})
 		}
 		if matcher.CmdlineRules != nil {
 			var rs []*regexp.Regexp
